@@ -144,6 +144,12 @@ struct CombosScreen: View {
         }
         .padding(24)
         .sheet(item: $editing) { ComboEditor(combo: $0) }
+        .onAppear {
+            if DebugSnapshot.opensComboEditor {
+                editing = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []),
+                                       output: KeyChord(keyCode: 0x15, modifiers: [.command, .shift]))
+            }
+        }
     }
 
     private func enabledBinding(_ id: UUID) -> Binding<Bool> {

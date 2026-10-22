@@ -54,6 +54,11 @@ final class AppState: NSObject, ObservableObject {
 
     /// While set, the next physical key press goes here (the "press a key" buttons in editors).
     @Published var captureHandler: ((HIDKeyEvent) -> Void)?
+    /// While set, raw key presses are turned into a shortcut for the shortcut recorder.
+    @Published var chordCaptureHandler: ((KeyChord) -> Void)? {
+        didSet { chordTracker = ChordTracker() }
+    }
+    private var chordTracker = ChordTracker()
     /// When > 0 the app's own window swallows key presses (monitor tab, recorders) so they don't beep or act.
     var swallowLocalKeys = 0
 
@@ -91,6 +96,7 @@ final class AppState: NSObject, ObservableObject {
         hid.isListening = { [weak self] in
             guard let self else { return false }
             return self.isMonitorViewed || self.isKeyboardViewed || self.captureHandler != nil
+                || self.chordCaptureHandler != nil
         }
         for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -296,6 +302,14 @@ final class AppState: NSObject, ObservableObject {
         launchAtLogin = LaunchAgent.isEnabled
     }
 
+    /// What a key from `device` turns into after the active remaps.
+    func remapped(_ usage: HIDUsage, from device: DeviceRef) -> HIDUsage {
+        guard config.enabled else { return usage }
+        let candidates = config.remaps.filter { $0.enabled && $0.from == usage }
+        let remap = candidates.first { $0.device?.matches(device) == true } ?? candidates.first { $0.device == nil }
+        return remap?.to ?? usage
+    }
+
     /// Keyboards for the pickers: the connected ones, then any a remap still refers to.
     var keyboardChoices: [DeviceRef] {
         var list = devices
@@ -355,6 +369,14 @@ final class AppState: NSObject, ObservableObject {
     // MARK: - Key events
 
     private func handle(hidEvent: HIDKeyEvent) {
+        if let handler = chordCaptureHandler {
+            // The raw key is what the keyboard sent; macOS (and the combo engine) sees it after the remaps.
+            if let chord = chordTracker.handle(remapped(hidEvent.usage, from: hidEvent.device), isDown: hidEvent.isDown) {
+                chordCaptureHandler = nil
+                handler(chord)
+            }
+            return
+        }
         let value = hidEvent.usage.hidutilValue
         if isKeyboardViewed {
             if hidEvent.isDown {

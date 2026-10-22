@@ -10,6 +10,8 @@ enum DebugSnapshot {
     private static let env = ProcessInfo.processInfo.environment
     static var initialScreen: SidebarItem? { env["KB_SCREEN"].flatMap(SidebarItem.init(rawValue:)) }
     static var opensEditor: Bool { env["KB_EDIT"] == "1" }
+    /// KB_EDIT=combo on the Combos screen opens the combo editor with PrtSc → ⌘⇧4.
+    static var opensComboEditor: Bool { env["KB_EDIT"] == "combo" }
     /// KB_ONBOARDING=1 shows the welcome sheet as on a first launch.
     static var showsOnboarding: Bool { env["KB_ONBOARDING"] == "1" }
     /// While rendering snapshots the app must not ask for permissions or open System Settings.
@@ -164,6 +166,22 @@ enum DebugSnapshot {
         let oldDevice = #"{"vendorID":1133,"productID":45077,"name":"K"}"#
         check("old device entries decode", (try? JSONDecoder().decode(DeviceRef.self, from: Data(oldDevice.utf8)))?.isBuiltIn == false)
 
+        // Recording a shortcut from raw key presses.
+        var tracker = ChordTracker()
+        func hid(_ u: UInt32) -> HIDUsage { HIDUsage(page: HIDPage.keyboard, usage: u) }
+        _ = tracker.handle(hid(0xE3), isDown: true)
+        _ = tracker.handle(hid(0xE1), isDown: true)
+        let screenshot = tracker.handle(hid(0x21), isDown: true)
+        check("⌘⇧4 recorded from raw keys", screenshot == KeyChord(keyCode: 0x15, modifiers: [.command, .shift]),
+              "\(String(describing: screenshot))")
+        tracker = ChordTracker()
+        _ = tracker.handle(hid(0xE6), isDown: true)
+        _ = tracker.handle(hid(0xE6), isDown: false)
+        check("released modifier is not part of the shortcut",
+              tracker.handle(hid(0x04), isDown: true) == KeyChord(keyCode: 0x00, modifiers: []))
+        check("modifier alone records nothing", ChordTracker().modifierOnlyIsNil())
+        check("system shortcut switch is available on this macOS", SystemShortcuts.isAvailable)
+
         // Config files from before the layout fixer still load.
         let old = #"{"enabled":true,"remaps":[],"combos":[],"knownDevices":[]}"#
         let decoded = try? JSONDecoder().decode(AppConfig.self, from: Data(old.utf8))
@@ -187,6 +205,7 @@ enum DebugSnapshot {
     #else
     static var initialScreen: SidebarItem? { nil }
     static var opensEditor: Bool { false }
+    static var opensComboEditor: Bool { false }
     static var showsOnboarding: Bool { false }
     static var isActive: Bool { false }
     static var assumesRequested: Bool { false }
@@ -196,3 +215,12 @@ enum DebugSnapshot {
     static func runSelfTestIfRequested() {}
     #endif
 }
+
+#if DEBUG
+private extension ChordTracker {
+    func modifierOnlyIsNil() -> Bool {
+        var copy = self
+        return copy.handle(HIDUsage(page: HIDPage.keyboard, usage: 0xE3), isDown: true) == nil
+    }
+}
+#endif

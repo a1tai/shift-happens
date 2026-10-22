@@ -53,6 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !startedInBackground { showMainWindow() }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Never leave macOS's own shortcuts switched off.
+        SystemShortcuts.restore()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Keep running in the menu bar: the shortcuts need the app alive.
         false

@@ -157,28 +157,42 @@ struct ComboEditor: View {
 struct ChordEditor: View {
     @EnvironmentObject private var state: AppState
     @Binding var chord: KeyChord
-    @State private var recorder: Any?
+    @State private var isRecording = false
+    @State private var localMonitor: Any?
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button {
-                recorder == nil ? startRecording() : stopRecording()
+                isRecording ? stopRecording() : startRecording()
             } label: {
-                Text(recorder == nil ? chord.display : "Press a combination…")
+                Text(isRecording ? "Press keys…" : chord.display)
                     .font(.system(.title3, design: .rounded).weight(.semibold))
-                    .frame(minWidth: 150)
+                    .lineLimit(1)
+                    .frame(minWidth: 130)
                     .padding(.vertical, 4)
             }
             .buttonStyle(.bordered)
-            .tint(recorder == nil ? nil : .accentColor)
-            .help("Click, then press a key combination")
+            .tint(isRecording ? .accentColor : nil)
+            .help(isRecording ? "Press the shortcut, or click to cancel" : "Click, then press a key combination")
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            ForEach(ModifierToggle.all) { item in
-                Toggle(item.symbol, isOn: modifierBinding(item.flag))
-                    .toggleStyle(.button)
+            HStack(spacing: 4) {
+                ForEach(ModifierToggle.all) { item in
+                    let on = chord.modifiers.contains(item.flag)
+                    Button {
+                        if on { chord.modifiers.remove(item.flag) } else { chord.modifiers.insert(item.flag) }
+                    } label: {
+                        Text(item.symbol)
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: 26, height: 24)
+                            .foregroundStyle(on ? Color.white : Color.primary)
+                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(on ? Color.accentColor : Color.primary.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
                     .help(item.name)
+                }
             }
             Picker("", selection: $chord.keyCode) {
                 ForEach(KeyDef.Category.allCases, id: \.self) { category in
@@ -193,33 +207,47 @@ struct ChordEditor: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 150)
+            .frame(width: 140)
         }
         .onDisappear(perform: stopRecording)
-    }
-
-    private func modifierBinding(_ flag: ModifierSet) -> Binding<Bool> {
-        Binding(
-            get: { chord.modifiers.contains(flag) },
-            set: { on in
-                if on { chord.modifiers.insert(flag) } else { chord.modifiers.remove(flag) }
-            }
-        )
-    }
-
-    private func startRecording() {
-        state.combos.isPaused = true
-        recorder = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            chord = KeyChord(keyCode: event.keyCode, modifiers: ModifierSet(nsFlags: event.modifierFlags).subtracting(.function))
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             stopRecording()
+        }
+    }
+
+    /// Records from raw keyboard input when Input Monitoring is allowed, so shortcuts macOS keeps to itself
+    /// (⌘⇧4, ⌘Space) are recorded too; while recording, those system shortcuts are switched off.
+    /// Without Input Monitoring only key presses that reach this window can be recorded.
+    private func startRecording() {
+        isRecording = true
+        state.combos.isPaused = true
+        state.swallowLocalKeys += 1
+        SystemShortcuts.disable()
+        if state.inputMonitoringGranted {
+            state.chordCaptureHandler = { recorded in
+                chord = recorded
+                stopRecording()
+            }
+        }
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if !state.inputMonitoringGranted {
+                chord = KeyChord(keyCode: event.keyCode,
+                                 modifiers: ModifierSet(nsFlags: event.modifierFlags).subtracting(.function))
+                stopRecording()
+            }
             return nil
         }
     }
 
     private func stopRecording() {
-        if let recorder { NSEvent.removeMonitor(recorder) }
-        recorder = nil
+        guard isRecording else { return }
+        isRecording = false
+        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        localMonitor = nil
+        state.chordCaptureHandler = nil
+        state.swallowLocalKeys -= 1
         state.combos.isPaused = false
+        SystemShortcuts.restore()
     }
 }
 
