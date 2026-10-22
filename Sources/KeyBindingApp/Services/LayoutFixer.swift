@@ -3,6 +3,8 @@
 // Copyright (c) 2025 abaskalov. See THIRD_PARTY_NOTICES.md.
 import AppKit
 import Carbon
+import IOKit.hid
+import os
 
 /// Remembers the keys of the word being typed. A lone press of the trigger key then
 /// - retypes the last word in the next layout and switches to it,
@@ -10,6 +12,9 @@ import Carbon
 /// - or just switches the layout if nothing is selected either.
 /// Pressing the trigger again converts back. Needs the Accessibility permission.
 final class LayoutFixer {
+    /// Diagnostics only: whether the tap runs and what the trigger does. Never which keys were typed.
+    private static let log = Logger(subsystem: "com.keybindingapp.KeyBindingApp", category: "LayoutFixer")
+
     var trigger: LayoutTrigger = .bothOptions {
         didSet { resetTriggerState() }
     }
@@ -63,8 +68,10 @@ final class LayoutFixer {
             },
             userInfo: context
         ) else {
+            Self.log.error("Event tap could not be created (no Accessibility access?)")
             return false
         }
+        Self.log.notice("Event tap started, trigger \(self.trigger.rawValue, privacy: .public), AX trusted \(AXIsProcessTrusted(), privacy: .public), input monitoring \(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent).rawValue, privacy: .public)")
         self.tap = tap
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
@@ -95,6 +102,7 @@ final class LayoutFixer {
 
     func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            Self.log.notice("Event tap disabled by macOS (\(type == .tapDisabledByTimeout ? "timeout" : "user input", privacy: .public)), re-enabling")
             // Keys typed while the tap was off never reached the buffer, and a trigger release may be lost.
             clearBuffer()
             resetTriggerState()
@@ -115,6 +123,7 @@ final class LayoutFixer {
         }
 
         if isPaused() {
+            if type == .flagsChanged { Self.log.notice("Paused: ignoring modifier change") }
             clearBuffer()
             triggerAlone = false
             return Unmanaged.passUnretained(event)
@@ -182,6 +191,9 @@ final class LayoutFixer {
         }
 
         let pressed = isTriggerPressed(flags)
+        if pressed != triggerDown {
+            Self.log.notice("Trigger \(pressed ? "down" : "up", privacy: .public), alone: \(self.triggerAlone, privacy: .public), flags 0x\(String(flags.rawValue, radix: 16), privacy: .public)")
+        }
         // Shift/⌘/⌃ with the trigger make it a shortcut. Caps Lock is left out: it stays set while on.
         let chord = !flags.intersection([.maskShift, .maskCommand, .maskControl]).isEmpty
         if pressed && !triggerDown {
@@ -225,6 +237,7 @@ final class LayoutFixer {
 
     private func fire() {
         let (word, trailingSpaces) = lastWord()
+        Self.log.notice("Fire: word of \(word.count, privacy: .public) keys, current layout \(self.sources.currentID() ?? "?", privacy: .public)")
         if let fixHandler {
             fixHandler(word, trailingSpaces)
             return

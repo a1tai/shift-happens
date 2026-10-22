@@ -74,6 +74,9 @@ final class AppState: NSObject, ObservableObject {
     let layoutFixer = LayoutFixer()
 
     private var localMonitor: Any?
+    /// Keeps App Nap away. A menu bar app with no window open gets napped, and its event taps are then
+    /// served late (all at once when the app wakes up), so combos and the layout fixer seem dead.
+    private var inputActivity: NSObjectProtocol?
     private var permissionTimer: Timer?
     private var reapplyWork: DispatchWorkItem?
     private let hidutilQueue = DispatchQueue(label: "KeyBindingApp.hidutil")
@@ -94,6 +97,10 @@ final class AppState: NSObject, ObservableObject {
     // MARK: - Lifecycle
 
     func start() {
+        inputActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+            reason: "Handles keyboard input: remaps, combos and the layout fixer"
+        )
         // The key history option is gone; drop its stored setting.
         UserDefaults.standard.removeObject(forKey: "keyMonitorKeepsHistory")
         LaunchAgent.refreshIfNeeded()
