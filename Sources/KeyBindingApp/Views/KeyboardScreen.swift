@@ -14,33 +14,21 @@ struct KeyboardScreen: View {
     private var device: DeviceRef? { state.keyboardChoices.first { $0.id == deviceID } }
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                KeyboardGrid(layout: layout) { unit in
-                    ForEach(layout.keys) { cap in
-                        KeyCapView(
-                            cap: cap,
-                            style: style,
-                            unit: unit,
-                            remap: remap(for: cap),
-                            comboCount: comboCount(for: cap),
-                            isPressed: state.pressedKeys.contains(cap.hid.hidutilValue),
-                            isHovered: hovered == cap.id
-                        )
-                        .onHover { hovered = $0 ? cap.id : (hovered == cap.id ? nil : hovered) }
-                        .onTapGesture { edit(cap) }
-                        .help(tooltip(for: cap))
-                    }
+        // No scrolling: the keyboard gets as large as the space under the header allows,
+        // with the legend and the key details right below it.
+        VStack(alignment: .leading, spacing: 16) {
+            header
+            GeometryReader { proxy in
+                let reserved = Self.legendHeight + Self.detailHeight + 2 * Self.spacing
+                VStack(spacing: Self.spacing) {
+                    keyboard(fitting: CGSize(width: proxy.size.width, height: proxy.size.height - reserved))
+                    legend.frame(height: Self.legendHeight)
+                    detail.frame(height: Self.detailHeight)
                 }
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary.opacity(0.05)))
-                .animation(.easeInOut(duration: 0.2), value: style)
-                legend
-                detail
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
-            .padding(24)
         }
+        .padding(24)
         .onAppear {
             state.setKeyboardScreenOpen(true)
             if DebugSnapshot.opensEditor, let esc = layout.keys.first { edit(esc) }
@@ -49,6 +37,30 @@ struct KeyboardScreen: View {
         .sheet(item: $editing) { remap in
             RemapEditor(remap: remap)
         }
+    }
+
+    private static let spacing: CGFloat = 16
+    private static let legendHeight: CGFloat = 20
+    private static let detailHeight: CGFloat = 60
+
+    private func keyboard(fitting size: CGSize) -> some View {
+        KeyboardGrid(layout: layout, size: size) { unit in
+            ForEach(layout.keys) { cap in
+                KeyCapView(
+                    cap: cap,
+                    style: style,
+                    unit: unit,
+                    remap: remap(for: cap),
+                    comboCount: comboCount(for: cap),
+                    isPressed: state.pressedKeys.contains(cap.hid.hidutilValue),
+                    isHovered: hovered == cap.id
+                )
+                .onHover { hovered = $0 ? cap.id : (hovered == cap.id ? nil : hovered) }
+                .onTapGesture { edit(cap) }
+                .help(tooltip(for: cap))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: style)
     }
 
     private var header: some View {
@@ -110,13 +122,14 @@ struct KeyboardScreen: View {
                     }
                     Spacer()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36, alignment: .leading)
             }
         } else {
             GroupBox {
+                // Same height as the key details, so hovering never resizes the keyboard.
                 Text("Hover over a key to see its bindings.")
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: 36, maxHeight: 36, alignment: .leading)
             }
         }
     }
@@ -153,32 +166,30 @@ struct KeyboardScreen: View {
 
 /// Fills the available width with the keyboard and places each key cap by its position in key units.
 /// Keys never get smaller than `minUnit`; below that the keyboard scrolls horizontally instead.
+/// Draws the keyboard as large as `size` allows, in both directions, inside a card that hugs it.
+/// Never scrolls: in a small window the keys get smaller instead.
 private struct KeyboardGrid<Content: View>: View {
-    static var minUnit: CGFloat { 24 }
-    /// The small Mac keyboard would get huge keys in a wide window.
+    /// The small Mac keyboard would get huge keys in a big window.
     static var maxUnit: CGFloat { 64 }
+    static var cardPadding: CGFloat { 16 }
     let layout: KeyboardLayout
+    let size: CGSize
     @ViewBuilder let content: (CGFloat) -> Content
-    @State private var availableWidth: CGFloat = 0
 
-    /// Key size: fill the width with this layout, within limits. Derived on every layout or width change.
     private var unit: CGFloat {
-        guard availableWidth > 0 else { return Self.minUnit }
-        return min(Self.maxUnit, max(Self.minUnit, (availableWidth / layout.width).rounded(.down)))
+        let inset = Self.cardPadding * 2
+        let fit = min((size.width - inset) / layout.width, (size.height - inset) / layout.height)
+        return max(1, min(Self.maxUnit, fit.rounded(.down)))
     }
 
     var body: some View {
-        ScrollView(.horizontal) {
-            KeyCapLayout(layout: layout, unit: unit) { content(unit) }
-                // Centered when the keyboard is narrower than the space (Mac layout in a wide window).
-                .frame(minWidth: availableWidth)
-        }
-        .frame(maxWidth: .infinity)
-        .background(GeometryReader { proxy in
-            Color.clear
-                .onAppear { availableWidth = proxy.size.width }
-                .onChange(of: proxy.size.width) { availableWidth = $0 }
-        })
+        let unit = self.unit
+        let _ = DebugSnapshot.recordKeyboardFit(
+            drawn: CGSize(width: layout.width * unit, height: layout.height * unit),
+            available: CGSize(width: size.width - Self.cardPadding * 2, height: size.height - Self.cardPadding * 2))
+        KeyCapLayout(layout: layout, unit: unit) { content(unit) }
+            .padding(Self.cardPadding)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary.opacity(0.05)))
     }
 }
 

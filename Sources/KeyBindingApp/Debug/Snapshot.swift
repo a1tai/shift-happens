@@ -14,6 +14,12 @@ enum DebugSnapshot {
     static var showsOnboarding: Bool { env["KB_ONBOARDING"] == "1" }
     /// While rendering snapshots the app must not ask for permissions or open System Settings.
     static var isActive: Bool { env["KB_SNAPSHOT"] != nil }
+    /// KB_NO_BANNER=1 hides the permission banners, to check layouts as they look once permissions are granted.
+    static var hidesBanners: Bool { env["KB_NO_BANNER"] == "1" }
+
+    private static var lastKeyboardFit: (drawn: CGSize, available: CGSize)?
+    static func recordKeyboardFit(drawn: CGSize, available: CGSize) { lastKeyboardFit = (drawn, available) }
+
     /// KB_REQUESTED=1 renders permissions as if macOS had asked before (the "Reset and Ask Again" state).
     static var assumesRequested: Bool { env["KB_REQUESTED"] == "1" }
 
@@ -27,6 +33,21 @@ enum DebugSnapshot {
             guard let view = target.contentView?.superview ?? target.contentView,
                   let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
             view.cacheDisplay(in: view.bounds, to: rep)
+            if let fit = lastKeyboardFit {
+                let fits = fit.drawn.width <= fit.available.width + 0.5 && fit.drawn.height <= fit.available.height + 0.5
+                print("KEYBOARD \(fits ? "FITS" : "OVERFLOWS"): drawn \(Int(fit.drawn.width))×\(Int(fit.drawn.height)) "
+                      + "in \(Int(fit.available.width))×\(Int(fit.available.height))")
+            }
+            // Scroll views in the detail area (the sidebar list is one too, on the left).
+            let sidebarEdge: CGFloat = 260
+            func scrollViews(in view: NSView) -> [NSScrollView] {
+                let own = (view as? NSScrollView).map { [$0] } ?? []
+                return own + view.subviews.flatMap(scrollViews)
+            }
+            let detailScrollers = scrollViews(in: view).filter {
+                $0.convert($0.bounds, to: nil).minX > sidebarEdge && !$0.isHidden && $0.frame.width > 0
+            }
+            print("SCROLL VIEWS IN DETAIL: \(detailScrollers.count)")
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
             exit(0)
         }
@@ -169,6 +190,8 @@ enum DebugSnapshot {
     static var showsOnboarding: Bool { false }
     static var isActive: Bool { false }
     static var assumesRequested: Bool { false }
+    static var hidesBanners: Bool { false }
+    static func recordKeyboardFit(drawn: CGSize, available: CGSize) {}
     static func runIfRequested(window: NSWindow) {}
     static func runSelfTestIfRequested() {}
     #endif

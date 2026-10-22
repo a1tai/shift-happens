@@ -62,7 +62,7 @@ struct ContentView: View {
             .safeAreaInset(edge: .bottom) { StatusFooter().padding(12) }
         } detail: {
             VStack(spacing: 0) {
-                PermissionBanner()
+                if !DebugSnapshot.hidesBanners { PermissionBanner() }
                 Group {
                     switch selection ?? .keyboard {
                     case .keyboard: KeyboardScreen()
