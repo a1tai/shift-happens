@@ -63,6 +63,15 @@ final class HIDMonitor {
         return true
     }
 
+    /// Whether a connected keyboard has this key (e.g. fn on the Apple vendor page).
+    func hasKey(page: UInt32, usage: UInt32) -> Bool {
+        guard let manager, let set = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return false }
+        let matching = [kIOHIDElementUsagePageKey: page, kIOHIDElementUsageKey: usage] as CFDictionary
+        return set.contains { device in
+            ((IOHIDDeviceCopyMatchingElements(device, matching, IOOptionBits(kIOHIDOptionsTypeNone)) as? [IOHIDElement]) ?? []).isEmpty == false
+        }
+    }
+
     func stop() {
         guard let manager else { return }
         IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)

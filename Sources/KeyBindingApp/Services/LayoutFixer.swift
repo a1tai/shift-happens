@@ -20,6 +20,8 @@ final class LayoutFixer {
     }
     /// Checked on every event: while true, keys pass through and nothing is fixed.
     var isPaused: () -> Bool = { false }
+    /// fn presses come from the HID monitor (`handleFnFromHID`): on MacBooks fn never reaches event taps.
+    var takesFnFromHID = false
     /// Replaces the fixing itself (used by the debug self-test, which must not type anything).
     var fixHandler: ((_ word: [TypedKey], _ trailingSpaces: Int) -> Void)?
 
@@ -32,6 +34,8 @@ final class LayoutFixer {
     private var triggerDown = false
     private var triggerAlone = false
     private var lastCapsLockState = false
+    /// Diagnostics: how many key presses the tap has seen (no key contents).
+    private var keyDownCount = 0
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -136,6 +140,17 @@ final class LayoutFixer {
         }
 
         switch type {
+        case .flagsChanged:
+            // Modifier keys only (fn, ⇧, ⌘…): which one changed and the flags, to see what the trigger key sends.
+            Self.log.notice("Modifier change: key code \(event.getIntegerValueField(.keyboardEventKeycode), privacy: .public), flags 0x\(String(event.flags.rawValue, radix: 16), privacy: .public)")
+        case .keyDown:
+            keyDownCount += 1
+            if keyDownCount % 5 == 1 { Self.log.notice("Key presses seen: \(self.keyDownCount, privacy: .public)") }
+        default:
+            break
+        }
+
+        switch type {
         case .keyDown:
             handleKeyDown(UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode)), flags: event.flags)
         case .flagsChanged:
@@ -180,8 +195,31 @@ final class LayoutFixer {
         if buffer.count > maxBufferSize { buffer.removeFirst(buffer.count - maxBufferSize) }
     }
 
+    /// A press or release of fn as the keyboard reported it. A lone press and release fires, as with the
+    /// other triggers; Shift, ⌘, ⌃, ⌥ or any key pressed meanwhile make it a shortcut instead.
+    func handleFnFromHID(isDown: Bool) {
+        guard trigger == .fn, tap != nil || fixHandler != nil, !isPaused() else { return }
+        Self.log.notice("fn \(isDown ? "down" : "up", privacy: .public) (keyboard)")
+        if isDown {
+            let flags = CGEventSource.flagsState(.combinedSessionState)
+            triggerDown = true
+            triggerAlone = flags.intersection([.maskShift, .maskCommand, .maskControl, .maskAlternate]).isEmpty
+        } else if triggerDown {
+            if triggerAlone { fire() }
+            triggerDown = false
+            triggerAlone = false
+        }
+    }
+
     /// Returns true when the event must be swallowed (Caps Lock used as the trigger).
     private func handleFlagsChanged(_ flags: CGEventFlags) -> Bool {
+        if trigger == .fn && takesFnFromHID {
+            // fn itself comes from the keyboard; a modifier pressed while fn is down makes it a shortcut.
+            if triggerDown && !flags.intersection([.maskShift, .maskCommand, .maskControl, .maskAlternate]).isEmpty {
+                triggerAlone = false
+            }
+            return false
+        }
         if trigger == .capsLock {
             let capsOn = flags.contains(.maskAlphaShift)
             guard capsOn != lastCapsLockState else { return false }

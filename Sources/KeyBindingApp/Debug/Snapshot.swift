@@ -153,6 +153,15 @@ enum DebugSnapshot {
         type("abc"); let swallowed = flags(.maskAlphaShift)
         check("Caps Lock press is swallowed", swallowed)
         expect("Caps Lock fires", word: "abc")
+        // fn from the keyboard (HID), as on MacBooks where fn never reaches event taps.
+        fixer.trigger = .fn
+        fixer.takesFnFromHID = true
+        type("ghbdtn"); fixer.handleFnFromHID(isDown: true); fixer.handleFnFromHID(isDown: false)
+        expect("fn from the keyboard fires", word: "ghbdtn")
+        type("abc"); fixer.handleFnFromHID(isDown: true); keyDown(key(for: "x")); fixer.handleFnFromHID(isDown: false)
+        expect("fn + key is a shortcut", word: nil)
+        type("abc"); fixer.handleFnFromHID(isDown: true); _ = flags(.maskShift); fixer.handleFnFromHID(isDown: false)
+        expect("fn + Shift is a shortcut", word: nil)
         fixer.trigger = .bothOptions
         fixer.isPaused = { true }
         type("abc"); tapOption(); expect("paused fixer does nothing", word: nil)

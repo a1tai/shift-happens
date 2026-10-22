@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import os
 import Foundation
 
 /// The key monitor's last press: what the keyboard sent and what macOS made of it.
@@ -110,6 +111,7 @@ final class AppState: NSObject, ObservableObject {
             guard let self else { return false }
             return self.isMonitorViewed || self.isKeyboardViewed || self.captureHandler != nil
                 || self.chordCaptureHandler != nil || self.macroCaptureHandler != nil
+                || (self.layoutFixer.isRunning && self.layoutFixer.trigger == .fn)
         }
         for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
@@ -215,6 +217,12 @@ final class AppState: NSObject, ObservableObject {
     private func updateLayoutFixer() {
         let settings = config.layoutFixer
         if layoutFixer.trigger != settings.trigger { layoutFixer.trigger = settings.trigger }
+        if layoutFixer.takesFnFromHID != inputMonitoringGranted {
+            layoutFixer.takesFnFromHID = inputMonitoringGranted
+            if inputMonitoringGranted {
+                os_log("Keyboard reports an fn key: %{public}@", hid.hasKey(page: KeyCatalog.fn.page, usage: KeyCatalog.fn.usage) ? "yes" : "no")
+            }
+        }
         if settings.enabled {
             if !layoutFixer.isRunning && !layoutFixer.start() { accessibilityMissing() }
         } else if layoutFixer.isRunning {
@@ -395,6 +403,7 @@ final class AppState: NSObject, ObservableObject {
     // MARK: - Key events
 
     private func handle(hidEvent: HIDKeyEvent) {
+        if hidEvent.usage == KeyCatalog.fn { layoutFixer.handleFnFromHID(isDown: hidEvent.isDown) }
         if let handler = macroCaptureHandler {
             handler(remapped(hidEvent.usage, from: hidEvent.device), hidEvent.isDown, hidEvent.time)
             return
