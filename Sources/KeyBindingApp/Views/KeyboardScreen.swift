@@ -35,6 +35,7 @@ struct KeyboardScreen: View {
                 }
                 .padding(16)
                 .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary.opacity(0.05)))
+                .animation(.easeInOut(duration: 0.2), value: style)
                 legend
                 detail
             }
@@ -158,31 +159,34 @@ private struct KeyboardGrid<Content: View>: View {
     static var maxUnit: CGFloat { 64 }
     let layout: KeyboardLayout
     @ViewBuilder let content: (CGFloat) -> Content
-    @State private var unit: CGFloat = 40
+    @State private var availableWidth: CGFloat = 0
+
+    /// Key size: fill the width with this layout, within limits. Derived on every layout or width change.
+    private var unit: CGFloat {
+        guard availableWidth > 0 else { return Self.minUnit }
+        return min(Self.maxUnit, max(Self.minUnit, (availableWidth / layout.width).rounded(.down)))
+    }
 
     var body: some View {
         ScrollView(.horizontal) {
             KeyCapLayout(layout: layout, unit: unit) { content(unit) }
+                // Centered when the keyboard is narrower than the space (Mac layout in a wide window).
+                .frame(minWidth: availableWidth)
         }
-        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity)
         .background(GeometryReader { proxy in
-                Color.clear
-                    .onAppear { update(proxy.size.width) }
-                    .onChange(of: proxy.size.width) { update($0) }
-            })
-    }
-
-    private func update(_ width: CGFloat) {
-        let fitted = min(Self.maxUnit, max(Self.minUnit, (width / layout.width).rounded(.down)))
-        if fitted != unit { unit = fitted }
+            Color.clear
+                .onAppear { availableWidth = proxy.size.width }
+                .onChange(of: proxy.size.width) { availableWidth = $0 }
+        })
     }
 }
 
-/// Places subviews in the order of the layout's keys, with a small gap between caps.
+/// Places subviews in the order of the layout's keys, with a gap between caps that scales with them.
 private struct KeyCapLayout: Layout {
     let layout: KeyboardLayout
     let unit: CGFloat
-    private let gap: CGFloat = 4
+    private var gap: CGFloat { (unit * 0.08).rounded() }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         CGSize(width: layout.width * unit, height: layout.height * unit)
