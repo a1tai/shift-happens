@@ -76,6 +76,14 @@ enum KeyCatalog {
             return seen.insert(code).inserted
         }
     }()
+    /// Also the modifier keys themselves, for macro steps that hold one down (Shift down … Shift up).
+    static let chordKeysWithModifiers: [KeyDef] = {
+        var seen = Set<UInt16>()
+        return all.filter { key in
+            guard let code = key.macKeyCode else { return false }
+            return seen.insert(code).inserted
+        }
+    }()
 
     // MARK: - Table
 

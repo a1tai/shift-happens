@@ -12,6 +12,8 @@ enum DebugSnapshot {
     static var opensEditor: Bool { env["KB_EDIT"] == "1" }
     /// KB_EDIT=combo on the Combos screen opens the combo editor with PrtSc → ⌘⇧4.
     static var opensComboEditor: Bool { env["KB_EDIT"] == "combo" }
+    /// KB_EDIT=macro on the Combos screen opens the combo editor with a sample macro.
+    static var opensMacroEditor: Bool { env["KB_EDIT"] == "macro" }
     /// KB_ONBOARDING=1 shows the welcome sheet as on a first launch.
     static var showsOnboarding: Bool { env["KB_ONBOARDING"] == "1" }
     /// While rendering snapshots the app must not ask for permissions or open System Settings.
@@ -182,6 +184,61 @@ enum DebugSnapshot {
         check("modifier alone records nothing", ChordTracker().modifierOnlyIsNil())
         check("system shortcut switch is available on this macOS", SystemShortcuts.isAvailable)
 
+        // Macro recording: down+up collapse into one press, modifiers fold in, pauses become delays.
+        let t0 = Date(timeIntervalSince1970: 1000)
+        func at(_ ms: Double) -> Date { t0.addingTimeInterval(ms / 1000) }
+        var rec = MacroRecorder(recordsDelays: true)
+        rec.handle(hid(0xE3), isDown: true, at: at(0))      // ⌘ down
+        rec.handle(hid(0x06), isDown: true, at: at(10))     // C
+        rec.handle(hid(0x06), isDown: false, at: at(60))
+        rec.handle(hid(0xE3), isDown: false, at: at(80))
+        rec.handle(hid(0x19), isDown: true, at: at(330))    // V after 250 ms
+        rec.handle(hid(0x19), isDown: false, at: at(380))
+        check("recorded ⌘C, 250 ms, V", rec.steps == [.press(KeyChord(keyCode: 0x08, modifiers: .command)), .delay(250),
+                                                     .press(KeyChord(keyCode: 0x09, modifiers: []))], "\(rec.steps)")
+        var noDelays = MacroRecorder(recordsDelays: false)
+        noDelays.handle(hid(0x04), isDown: true, at: at(0)); noDelays.handle(hid(0x04), isDown: false, at: at(5))
+        noDelays.handle(hid(0x05), isDown: true, at: at(900)); noDelays.handle(hid(0x05), isDown: false, at: at(950))
+        check("no delays when off", !noDelays.steps.contains { $0.isDelay } && noDelays.steps.count == 2)
+        var hold = MacroRecorder(recordsDelays: false)
+        hold.handle(hid(0x04), isDown: true, at: at(0)); hold.handle(hid(0x05), isDown: true, at: at(10))
+        hold.handle(hid(0x05), isDown: false, at: at(20)); hold.handle(hid(0x04), isDown: false, at: at(30))
+        check("overlapping keys stay down/up", hold.steps == [.keyDown(KeyChord(keyCode: 0x00, modifiers: [])),
+                                                              .press(KeyChord(keyCode: 0x0B, modifiers: [])),
+                                                              .keyUp(KeyChord(keyCode: 0x00, modifiers: []))], "\(hold.steps)")
+        var lone = MacroRecorder(recordsDelays: false)
+        lone.handle(hid(0xE1), isDown: true, at: at(0)); lone.handle(hid(0xE1), isDown: false, at: at(50))
+        check("lone modifier is a press", lone.steps == [.press(KeyChord(keyCode: 0x38, modifiers: []))], "\(lone.steps)")
+
+        // Saving macros, and combos saved before macros existed.
+        var macroCombo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []), output: KeyChord(keyCode: 0, modifiers: []))
+        macroCombo.macro = rec.steps.map { MacroItem(step: $0) } + [MacroItem(step: .text("Hi")),
+                                                                    MacroItem(step: .keyDown(KeyChord(keyCode: 0x38, modifiers: [])))]
+        macroCombo.stepDelay = 20
+        let decodedCombo = (try? JSONEncoder().encode(macroCombo)).flatMap { try? JSONDecoder().decode(ComboBinding.self, from: $0) }
+        check("macro round-trip", decodedCombo == macroCombo)
+        let oldCombo = #"{"id":"21111111-1111-1111-1111-111111111111","trigger":{"keyCode":105,"modifiers":0},"output":{"keyCode":21,"modifiers":12},"note":"","enabled":true}"#
+        let decodedOld = try? JSONDecoder().decode(ComboBinding.self, from: Data(oldCombo.utf8))
+        check("old combo loads as a shortcut", decodedOld?.isMacro == false && decodedOld?.output.keyCode == 21)
+        check("summary", macroCombo.outputSummary == "⌘C · 250 ms · V · “Hi” · Shift down", macroCombo.outputSummary)
+
+        // Playback: order, delays, and every held key released at the end.
+        final class FakePoster: KeyEventPosting {
+            var log: [String] = []
+            func key(_ keyCode: UInt16, down: Bool, modifiers: ModifierSet) { log.append("\(modifiers.symbols)\(keyCode)\(down ? "↓" : "↑")") }
+            func text(_ text: String) { log.append("text:\(text)") }
+            func wait(milliseconds: Int) { log.append("wait:\(milliseconds)") }
+        }
+        let fake = FakePoster()
+        MacroPlayer.run(macroCombo.macro.map(\.step), stepDelay: 20, poster: fake) { false }
+        check("playback order and timing", fake.log == ["⌘8↓", "⌘8↑", "wait:250", "9↓", "9↑", "wait:20", "text:Hi", "wait:20",
+                                                         "56↓", "56↑"], "\(fake.log)")
+        let cancelled = FakePoster()
+        var calls = 0
+        MacroPlayer.run([.keyDown(KeyChord(keyCode: 0x38, modifiers: [])), .delay(10), .press(KeyChord(keyCode: 0, modifiers: []))],
+                        stepDelay: 0, poster: cancelled) { calls += 1; return calls > 2 }
+        check("cancelled macro releases held keys", cancelled.log == ["56↓", "wait:10", "56↑"], "\(cancelled.log)")
+
         // Config files from before the layout fixer still load.
         let old = #"{"enabled":true,"remaps":[],"combos":[],"knownDevices":[]}"#
         let decoded = try? JSONDecoder().decode(AppConfig.self, from: Data(old.utf8))
@@ -206,6 +263,7 @@ enum DebugSnapshot {
     static var initialScreen: SidebarItem? { nil }
     static var opensEditor: Bool { false }
     static var opensComboEditor: Bool { false }
+    static var opensMacroEditor: Bool { false }
     static var showsOnboarding: Bool { false }
     static var isActive: Bool { false }
     static var assumesRequested: Bool { false }

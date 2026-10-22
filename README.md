@@ -14,6 +14,8 @@ Bindings are saved and restored after a restart.
 - **Remaps** (key → key) through the system `hidutil`. Apply them to every keyboard or only to the Windows keyboard,
   so the MacBook's built-in keyboard stays unchanged. Targets include media keys, volume, brightness and Fn.
 - **Combos** (shortcut → shortcut), for example `Insert → ⌘V`, `Ctrl+C → ⌘C`, `PrtSc → ⌘⇧4`.
+  A combo can also play a **macro**: key presses, keys held down and released, pauses and typed text, recorded
+  from the keyboard (with or without the pauses between presses) or added by hand, played once or repeated while held.
 - **Layout Fixer** (based on [Perekluk](https://github.com/abaskalov/perekluk)): typed a word in the wrong layout?
   Press and release the trigger key (either Option by default, or left/right Option, fn 🌐, Caps Lock) on its own.
   The last word is retyped in the next layout and the layout switches; with a selection, the selected text is converted;

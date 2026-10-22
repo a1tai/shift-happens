@@ -124,13 +124,43 @@ struct KeyChord: Codable, Hashable {
     var display: String { modifiers.symbols + KeyCatalog.name(forMacKeyCode: keyCode) }
 }
 
-/// A shortcut handled by the app's event tap: when `trigger` is pressed, `output` is sent instead.
+/// A shortcut handled by the app's event tap: when `trigger` is pressed, `output` is sent instead,
+/// or the macro is played when it has steps.
 struct ComboBinding: Codable, Hashable, Identifiable {
     var id = UUID()
     var trigger: KeyChord
     var output: KeyChord
     var note: String = ""
     var enabled = true
+    /// Played instead of `output` when not empty.
+    var macro: [MacroItem] = []
+    /// Pause added between macro steps, in milliseconds.
+    var stepDelay = 0
+    /// Holding the trigger plays the macro again and again; otherwise it plays once per press.
+    var repeatsWhileHeld = false
+
+    var isMacro: Bool { !macro.isEmpty }
+    var outputSummary: String { isMacro ? macro.summary : output.display }
+
+    init(trigger: KeyChord, output: KeyChord, note: String = "", enabled: Bool = true) {
+        self.trigger = trigger
+        self.output = output
+        self.note = note
+        self.enabled = enabled
+    }
+
+    // Combos saved before macros existed have no macro fields.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        trigger = try c.decode(KeyChord.self, forKey: .trigger)
+        output = try c.decode(KeyChord.self, forKey: .output)
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        macro = try c.decodeIfPresent([MacroItem].self, forKey: .macro) ?? []
+        stepDelay = try c.decodeIfPresent(Int.self, forKey: .stepDelay) ?? 0
+        repeatsWhileHeld = try c.decodeIfPresent(Bool.self, forKey: .repeatsWhileHeld) ?? false
+    }
 }
 
 /// The key whose lone press fixes the layout of the last word or selection.

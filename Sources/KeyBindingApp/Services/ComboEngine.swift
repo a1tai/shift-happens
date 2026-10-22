@@ -21,6 +21,7 @@ final class ComboEngine {
     private var runLoopSource: CFRunLoopSource?
     private var swallowedKeyUps = Set<UInt16>()
     private let source = CGEventSource(stateID: .privateState)
+    let macros = MacroPlayer()
 
     var isRunning: Bool { tap != nil }
 
@@ -52,6 +53,7 @@ final class ComboEngine {
     }
 
     func stop() {
+        macros.cancelAll()
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
         if let tap { CFMachPortInvalidate(tap) }
@@ -89,10 +91,16 @@ final class ComboEngine {
             return Unmanaged.passUnretained(event)
         }
 
-        // Send a full press of the output on every key-down (auto-repeat included),
-        // and swallow the trigger's key-up, so no key or modifier ever gets stuck.
+        // Swallow the trigger's key-up too, so no key or modifier ever gets stuck.
         swallowedKeyUps.insert(keyCode)
-        post(binding.output)
+        if binding.isMacro {
+            // A held key repeats; a macro runs again only if asked to, and never twice at once.
+            let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+            if !isRepeat || binding.repeatsWhileHeld { macros.play(binding) }
+        } else {
+            // A full press of the output on every key-down, auto-repeat included.
+            post(binding.output)
+        }
         return nil
     }
 

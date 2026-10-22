@@ -117,7 +117,7 @@ struct KeyboardScreen: View {
                             .foregroundStyle(remap.enabled ? Color.accentColor : .secondary)
                     }
                     ForEach(combos(for: cap)) { combo in
-                        Label("\(combo.trigger.display) → \(combo.output.display)", systemImage: "command.circle.fill")
+                        Label("\(combo.trigger.display) → \(combo.outputSummary)", systemImage: "command.circle.fill")
                             .foregroundStyle(.purple)
                     }
                     Spacer()

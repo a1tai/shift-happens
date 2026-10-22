@@ -126,7 +126,10 @@ struct CombosScreen: View {
                     TableColumn("Send") { combo in
                         HStack {
                             Image(systemName: "arrow.right").foregroundStyle(.secondary)
-                            KeyBadge(text: combo.output.display, highlighted: combo.enabled)
+                            KeyBadge(text: combo.outputSummary, highlighted: combo.enabled)
+                            if combo.isMacro {
+                                Text(counted(combo.macro.count, "step")).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                     TableColumn("Note") { combo in
@@ -145,9 +148,18 @@ struct CombosScreen: View {
         .padding(24)
         .sheet(item: $editing) { ComboEditor(combo: $0) }
         .onAppear {
-            if DebugSnapshot.opensComboEditor {
-                editing = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []),
-                                       output: KeyChord(keyCode: 0x15, modifiers: [.command, .shift]))
+            if DebugSnapshot.opensComboEditor || DebugSnapshot.opensMacroEditor {
+                var combo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []),
+                                         output: KeyChord(keyCode: 0x15, modifiers: [.command, .shift]))
+                if DebugSnapshot.opensMacroEditor {
+                    combo.macro = [MacroItem(step: .press(KeyChord(keyCode: 0x08, modifiers: .command))),
+                                   MacroItem(step: .delay(100)),
+                                   MacroItem(step: .keyDown(KeyChord(keyCode: 0x38, modifiers: []))),
+                                   MacroItem(step: .press(KeyChord(keyCode: 0x09, modifiers: .command))),
+                                   MacroItem(step: .keyUp(KeyChord(keyCode: 0x38, modifiers: []))),
+                                   MacroItem(step: .text("Hello"))]
+                }
+                editing = combo
             }
         }
     }

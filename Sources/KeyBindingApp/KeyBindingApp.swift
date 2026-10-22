@@ -54,8 +54,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Never leave macOS's own shortcuts switched off.
+        // Never leave macOS's own shortcuts switched off, or a macro's keys held down.
         SystemShortcuts.restore()
+        AppState.shared.combos.macros.cancelAll()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

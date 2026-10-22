@@ -100,29 +100,50 @@ struct ComboEditor: View {
     @EnvironmentObject private var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var draft: ComboBinding
+    @State private var sendsMacro: Bool
     private let isNew: Bool
 
     init(combo: ComboBinding) {
         _draft = State(initialValue: combo)
+        _sendsMacro = State(initialValue: combo.isMacro || DebugSnapshot.opensMacroEditor)
         isNew = !AppState.shared.config.combos.contains { $0.id == combo.id }
+    }
+
+    private var canSave: Bool {
+        sendsMacro ? draft.isMacro : draft.trigger != draft.output
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(isNew ? "New Combo" : "Combo").font(.title2.bold())
-            Text("When you press the first combination, the app sends the second one instead. For example Insert → ⌘V or ⌃C → ⌘C.")
+            Text(sendsMacro
+                 ? "When you press the shortcut, the app plays the steps below: keys, pauses and text."
+                 : "When you press the first combination, the app sends the second one instead. For example Insert → ⌘V or ⌃C → ⌘C.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Form {
                 Section("When pressed") { ChordEditor(chord: $draft.trigger) }
-                Section("Send") { ChordEditor(chord: $draft.output) }
+                Section {
+                    Picker("Send", selection: $sendsMacro) {
+                        Text("Shortcut").tag(false)
+                        Text("Macro").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    if !sendsMacro { ChordEditor(chord: $draft.output) }
+                }
                 Section {
                     TextField("Note", text: $draft.note, prompt: Text("for example “Paste”"))
                     Toggle("Enabled", isOn: $draft.enabled)
                 }
             }
             .formStyle(.grouped)
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
+
+            if sendsMacro {
+                MacroEditor(combo: $draft)
+            }
 
             if !state.accessibilityGranted {
                 Label("Combos start working once Accessibility is allowed.", systemImage: "lock")
@@ -139,16 +160,22 @@ struct ComboEditor: View {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    state.save(draft)
+                    var combo = draft
+                    if !sendsMacro { combo.macro = [] }
+                    state.save(combo)
                     dismiss()
                     if !state.accessibilityGranted { Permissions.request(.accessibility) }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(draft.trigger == draft.output)
+                .disabled(!canSave)
             }
         }
         .padding(24)
-        .frame(width: 560)
+        .frame(width: sendsMacro ? 720 : 560)
+        .onChange(of: sendsMacro) { macro in
+            // Start a new macro from the shortcut that was set up so far.
+            if macro && draft.macro.isEmpty { draft.macro = [MacroItem(step: .press(draft.output))] }
+        }
     }
 }
 
@@ -157,8 +184,11 @@ struct ComboEditor: View {
 struct ChordEditor: View {
     @EnvironmentObject private var state: AppState
     @Binding var chord: KeyChord
-    @State private var isRecording = false
-    @State private var localMonitor: Any?
+    /// Lists Shift, Control and the like as keys too (macro steps that hold a modifier).
+    var allowsModifierKeys = false
+    @State private var recorderID = UUID()
+
+    private var isRecording: Bool { state.activeRecorder == recorderID }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -196,7 +226,8 @@ struct ChordEditor: View {
             }
             Picker("", selection: $chord.keyCode) {
                 ForEach(KeyDef.Category.allCases, id: \.self) { category in
-                    let keys = KeyCatalog.chordKeys.filter { $0.category == category }
+                    let keys = (allowsModifierKeys ? KeyCatalog.chordKeysWithModifiers : KeyCatalog.chordKeys)
+                        .filter { $0.category == category }
                     if !keys.isEmpty {
                         Section(category.rawValue) {
                             ForEach(keys) { key in
@@ -210,44 +241,21 @@ struct ChordEditor: View {
             .frame(width: 140)
         }
         .onDisappear(perform: stopRecording)
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+    }
+
+    /// Records from raw keyboard input when Input Monitoring is allowed, so shortcuts macOS keeps to itself
+    /// (⌘⇧4, ⌘Space) are recorded too; they are switched off while recording. Without Input Monitoring
+    /// only key presses that reach this window can be recorded.
+    private func startRecording() {
+        state.startRecording(recorderID)
+        state.chordCaptureHandler = { recorded in
+            chord = recorded
             stopRecording()
         }
     }
 
-    /// Records from raw keyboard input when Input Monitoring is allowed, so shortcuts macOS keeps to itself
-    /// (⌘⇧4, ⌘Space) are recorded too; while recording, those system shortcuts are switched off.
-    /// Without Input Monitoring only key presses that reach this window can be recorded.
-    private func startRecording() {
-        isRecording = true
-        state.combos.isPaused = true
-        state.swallowLocalKeys += 1
-        SystemShortcuts.disable()
-        if state.inputMonitoringGranted {
-            state.chordCaptureHandler = { recorded in
-                chord = recorded
-                stopRecording()
-            }
-        }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if !state.inputMonitoringGranted {
-                chord = KeyChord(keyCode: event.keyCode,
-                                 modifiers: ModifierSet(nsFlags: event.modifierFlags).subtracting(.function))
-                stopRecording()
-            }
-            return nil
-        }
-    }
-
     private func stopRecording() {
-        guard isRecording else { return }
-        isRecording = false
-        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
-        localMonitor = nil
-        state.chordCaptureHandler = nil
-        state.swallowLocalKeys -= 1
-        state.combos.isPaused = false
-        SystemShortcuts.restore()
+        state.stopRecording(recorderID)
     }
 }
 
@@ -321,35 +329,28 @@ struct KeyPicker: View {
 struct CaptureButton: View {
     @EnvironmentObject private var state: AppState
     let onCapture: (HIDKeyEvent) -> Void
-    @State private var waiting = false
+    @State private var recorderID = UUID()
+
+    private var isRecording: Bool { state.activeRecorder == recorderID }
 
     var body: some View {
-        Button(waiting ? "Press a key…" : "Record") {
-            if waiting {
-                cancel()
+        Button(isRecording ? "Press a key…" : "Record") {
+            if isRecording {
+                state.stopRecording(recorderID)
             } else {
-                waiting = true
-                state.swallowLocalKeys += 1
+                // Starting this recorder stops any other one.
+                state.startRecording(recorderID)
                 state.captureHandler = { event in
                     onCapture(event)
-                    finish()
+                    state.stopRecording(recorderID)
                 }
             }
         }
+        .buttonStyle(.bordered)
+        .tint(isRecording ? .accentColor : nil)
         .disabled(!state.inputMonitoringGranted)
         .help(state.inputMonitoringGranted ? "Click, then press a key on the keyboard" : "Needs Input Monitoring access")
-        .onDisappear(perform: cancel)
-    }
-
-    private func finish() {
-        guard waiting else { return }
-        waiting = false
-        state.swallowLocalKeys -= 1
-    }
-
-    private func cancel() {
-        if waiting { state.captureHandler = nil }
-        finish()
+        .onDisappear { state.stopRecording(recorderID) }
     }
 }
 

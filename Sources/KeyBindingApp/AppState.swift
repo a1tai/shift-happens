@@ -59,6 +59,13 @@ final class AppState: NSObject, ObservableObject {
         didSet { chordTracker = ChordTracker() }
     }
     private var chordTracker = ChordTracker()
+    /// While set, every raw key press and release (after remaps) goes to the macro recorder.
+    var macroCaptureHandler: ((HIDUsage, Bool, Date) -> Void)?
+
+    /// The one recorder listening right now (a Record button, the shortcut or the macro recorder).
+    /// Starting another recorder stops this one first.
+    @Published private(set) var activeRecorder: UUID?
+    private var endActiveRecorder: (() -> Void)?
     /// When > 0 the app's own window swallows key presses (monitor tab, recorders) so they don't beep or act.
     var swallowLocalKeys = 0
 
@@ -96,11 +103,15 @@ final class AppState: NSObject, ObservableObject {
         hid.isListening = { [weak self] in
             guard let self else { return false }
             return self.isMonitorViewed || self.isKeyboardViewed || self.captureHandler != nil
-                || self.chordCaptureHandler != nil
+                || self.chordCaptureHandler != nil || self.macroCaptureHandler != nil
         }
         for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
-            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 self?.forgetKeysNoLongerViewed()
+                // Leaving the app ends a recording, so macOS's own shortcuts come back.
+                if note.name == NSApplication.didResignActiveNotification, let id = self?.activeRecorder {
+                    self?.stopRecording(id)
+                }
             }
         }
         hid.onDevicesChanged = { [weak self] devices in
@@ -334,6 +345,34 @@ final class AppState: NSObject, ObservableObject {
 
     func clearLog() { log.removeAll() }
 
+    // MARK: - Recording
+
+    /// Starts listening for a recorder. Any other recorder is stopped first. While recording, the app's
+    /// window swallows key presses, combos and the layout fixer pause, and macOS's own shortcuts are off.
+    /// `onEnd` runs when this recording ends for whatever reason.
+    func startRecording(_ id: UUID, onEnd: @escaping () -> Void = {}) {
+        if let active = activeRecorder { stopRecording(active) }
+        activeRecorder = id
+        endActiveRecorder = onEnd
+        swallowLocalKeys += 1
+        combos.isPaused = true
+        SystemShortcuts.disable()
+    }
+
+    func stopRecording(_ id: UUID) {
+        guard activeRecorder == id else { return }
+        activeRecorder = nil
+        captureHandler = nil
+        chordCaptureHandler = nil
+        macroCaptureHandler = nil
+        swallowLocalKeys -= 1
+        combos.isPaused = false
+        SystemShortcuts.restore()
+        let end = endActiveRecorder
+        endActiveRecorder = nil
+        end?()
+    }
+
     // MARK: - Who is looking at key presses
 
     private var isMonitorViewed: Bool { monitorScreenOpen && windowVisible && NSApp.isActive }
@@ -369,6 +408,10 @@ final class AppState: NSObject, ObservableObject {
     // MARK: - Key events
 
     private func handle(hidEvent: HIDKeyEvent) {
+        if let handler = macroCaptureHandler {
+            handler(remapped(hidEvent.usage, from: hidEvent.device), hidEvent.isDown, hidEvent.time)
+            return
+        }
         if let handler = chordCaptureHandler {
             // The raw key is what the keyboard sent; macOS (and the combo engine) sees it after the remaps.
             if let chord = chordTracker.handle(remapped(hidEvent.usage, from: hidEvent.device), isDown: hidEvent.isDown) {
@@ -401,6 +444,16 @@ final class AppState: NSObject, ObservableObject {
     }
 
     private func handle(localEvent event: NSEvent) -> NSEvent? {
+        if activeRecorder != nil {
+            // Without Input Monitoring the shortcut recorder only has the key presses that reach this window.
+            if event.type == .keyDown, !inputMonitoringGranted, let handler = chordCaptureHandler {
+                chordCaptureHandler = nil
+                handler(KeyChord(keyCode: event.keyCode,
+                                 modifiers: ModifierSet(nsFlags: event.modifierFlags).subtracting(.function)))
+            }
+            // Nothing typed while recording reaches the window, not even ⌘ shortcuts.
+            return event.type == .keyDown ? nil : event
+        }
         if isMonitorViewed { addToLog(event) }
         if swallowLocalKeys > 0, event.type == .keyDown, !event.modifierFlags.contains(.command) {
             return nil
