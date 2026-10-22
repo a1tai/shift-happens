@@ -273,7 +273,14 @@ struct MacroEditor: View {
 
 /// One editable macro step, in columns: direction or type, then the key or value.
 private struct MacroStepRow: View {
+    @EnvironmentObject private var state: AppState
     @Binding var item: MacroItem
+    @State private var isEditingText = false
+    /// The text before editing started, for Esc.
+    @State private var textBeforeEditing = ""
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case delay, text }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -287,6 +294,7 @@ private struct MacroStepRow: View {
                 MacroKeyField(key: keyBinding)
             case .delay:
                 TextField("", value: delayBinding, format: .number)
+                    .focused($focusedField, equals: .delay)
                     .frame(width: 70)
                     .multilineTextAlignment(.trailing)
                 Text("ms").foregroundStyle(.secondary)
@@ -302,12 +310,42 @@ private struct MacroStepRow: View {
                 .fixedSize()
                 .help("Common delays")
             case .text:
-                TextField("Text to type", text: textBinding)
-                    .frame(maxWidth: 320)
+                textStep
             }
             Spacer(minLength: 0)
         }
         .padding(.vertical, 1)
+        // Return in a step's field finishes editing it; it must not save and close the sheet.
+        .onChange(of: focusedField) { field in state.isEditingMacroField = field != nil }
+        .onDisappear { if focusedField != nil { state.isEditingMacroField = false } }
+    }
+
+    /// Shown as text; double-click to edit, Return to finish, Esc to undo the edit.
+    @ViewBuilder
+    private var textStep: some View {
+        if isEditingText {
+            TextField("Text to type", text: textBinding)
+                .focused($focusedField, equals: .text)
+                .frame(maxWidth: 320)
+                .onSubmit { isEditingText = false }
+                .onExitCommand {
+                    textBinding.wrappedValue = textBeforeEditing
+                    isEditingText = false
+                }
+                .onAppear { focusedField = .text }
+                .onChange(of: focusedField) { field in if field != .text { isEditingText = false } }
+        } else {
+            Text(textBinding.wrappedValue.isEmpty ? "Double-click to enter text" : "“\(textBinding.wrappedValue)”")
+                .foregroundStyle(textBinding.wrappedValue.isEmpty ? .secondary : .primary)
+                .lineLimit(1)
+                .frame(maxWidth: 320, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    textBeforeEditing = textBinding.wrappedValue
+                    isEditingText = true
+                }
+                .help("Double-click to edit")
+        }
     }
 
     private var kind: String {

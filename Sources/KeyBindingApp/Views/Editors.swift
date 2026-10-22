@@ -179,7 +179,7 @@ struct ComboEditor: View {
                     }
                 }
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { dismiss() }.cancelAction(!state.isEditingMacroField)
                 Button("Save") {
                     var combo = draft
                     if !sendsMacro { combo.macro = [] }
@@ -187,7 +187,7 @@ struct ComboEditor: View {
                     dismiss()
                     if !state.accessibilityGranted { Permissions.request(.accessibility) }
                 }
-                .keyboardShortcut(.defaultAction)
+                .defaultAction(!state.isEditingMacroField)
                 .disabled(!canSave)
             }
         }
@@ -413,5 +413,21 @@ struct KeyBadge: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .strokeBorder(highlighted ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.15))
             )
+    }
+}
+
+extension View {
+    /// Makes this the Return-key button only while `enabled`.
+    @ViewBuilder
+    func defaultAction(_ enabled: Bool) -> some View {
+        if enabled { keyboardShortcut(.defaultAction) } else { self }
+    }
+}
+
+extension View {
+    /// Makes this the Esc-key button only while `enabled`.
+    @ViewBuilder
+    func cancelAction(_ enabled: Bool) -> some View {
+        if enabled { keyboardShortcut(.cancelAction) } else { self }
     }
 }

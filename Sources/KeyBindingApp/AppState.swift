@@ -65,6 +65,8 @@ final class AppState: NSObject, ObservableObject {
     /// The one recorder listening right now (a Record button, the shortcut or the macro recorder).
     /// Starting another recorder stops this one first.
     @Published private(set) var activeRecorder: UUID?
+    /// A text or number field in a macro step is being edited: Return finishes that, it doesn't save the sheet.
+    @Published var isEditingMacroField = false
     private var endActiveRecorder: (() -> Void)?
     /// When the last recording ended. The key press that ended it (the recorded key, or Esc) reaches the
     /// window a moment after the raw input, and must not act there (Esc would close the sheet, Return save it).
