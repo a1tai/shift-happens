@@ -9,7 +9,9 @@ struct MenuBarContent: View {
         Toggle("Bindings on", isOn: $state.config.enabled)
         Text(counted(state.config.remaps.filter(\.enabled).count, "remap") + " · "
              + counted(state.config.combos.filter(\.enabled).count, "combo"))
-        if !state.inputMonitoringGranted || (!state.accessibilityGranted && !state.config.combos.isEmpty) {
+        Toggle("Layout Fixer", isOn: $state.config.layoutFixer.enabled)
+        if !state.inputMonitoringGranted
+            || (!state.accessibilityGranted && (!state.config.combos.isEmpty || state.config.layoutFixer.enabled)) {
             Text("⚠︎ Missing permissions, open the window")
         }
         Divider()

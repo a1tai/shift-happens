@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DebugSnapshot.runSelfTestIfRequested()
         Self.shared = self
         DistributedNotificationCenter.default().addObserver(
             forName: Self.showWindowNotification, object: nil, queue: .main

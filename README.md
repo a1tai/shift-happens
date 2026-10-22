@@ -13,6 +13,11 @@ Bindings are saved and restored after a restart.
 - **Remaps** (key → key) through the system `hidutil`. Apply them to every keyboard or only to the Windows keyboard,
   so the MacBook's built-in keyboard stays unchanged. Targets include media keys, volume, brightness and Fn.
 - **Combos** (shortcut → shortcut), for example `Insert → ⌘V`, `Ctrl+C → ⌘C`, `PrtSc → ⌘⇧4`.
+- **Layout Fixer** (based on [Perekluk](https://github.com/abaskalov/perekluk)): typed a word in the wrong layout?
+  Press and release the trigger key (either Option by default, or left/right Option, fn 🌐, Caps Lock) on its own.
+  The last word is retyped in the next layout and the layout switches; with a selection, the selected text is converted;
+  with nothing typed, the layout just switches. Press again to undo. Works with three or more layouts and dead keys.
+  Off by default; can also show the current layout (En / Ру) in the menu bar.
 - **Presets** in Settings: swap Win and Alt, Print Screen, Home/End like in Windows, Ctrl shortcuts like in Windows.
 - **After restart** the app starts in the background (LaunchAgent), reapplies the bindings and lives in the menu bar.
   Bindings are reapplied whenever a keyboard is connected.
@@ -42,7 +47,7 @@ On first launch macOS asks for two permissions (System Settings → Privacy & Se
 | Permission | Why |
 |---|---|
 | Input Monitoring | To see key codes and which keyboard they came from |
-| Accessibility | To replace key combinations (combos) |
+| Accessibility | To replace key combinations (combos) and to fix the layout of typed text |
 
 Plain remaps through `hidutil` work without either of them.
 
@@ -57,10 +62,14 @@ granted again (remove the old entry and enable the new one). To avoid that, sign
 | `Services/HIDMonitor.swift` | Reads keyboards through IOHIDManager and watches for connections |
 | `Services/RemapEngine.swift` | Applies remaps with `hidutil property --set '{"UserKeyMapping":[...]}'` |
 | `Services/ComboEngine.swift` | CGEventTap: catches a combination and sends another one instead |
+| `Services/LayoutFixer.swift` | Event tap that buffers the last word and fixes it or the selection on a lone trigger press |
+| `Services/InputSources.swift` | Keyboard layouts (TIS) and conversion between them with `UCKeyTranslate` |
 | `Services/LaunchAgent.swift` | `~/Library/LaunchAgents/com.keybindingapp.agent.plist`, launched with `--background` |
 | `Model/KeyCatalog.swift` | Table of HID codes, macOS key codes and key names |
 | `Views/*` | User interface |
-| `Debug/Snapshot.swift` | Debug builds only: renders a screen to PNG (`KB_SNAPSHOT=out.png KB_SCREEN=remaps .build/debug/KeyBindingApp`) |
+| `Debug/Snapshot.swift` | Debug builds only: renders a screen to PNG (`KB_SNAPSHOT=out.png KB_SCREEN=remaps .build/debug/KeyBindingApp`) and runs the layout fixer self-test (`KB_SELFTEST=1 .build/debug/KeyBindingApp`) |
 
 To turn everything off quickly, use the switch in the menu bar. To clear the system remaps by hand:
 `hidutil property --set '{"UserKeyMapping":[]}'`.
+
+The layout fixer is adapted from Perekluk (MIT License), see `THIRD_PARTY_NOTICES.md`.

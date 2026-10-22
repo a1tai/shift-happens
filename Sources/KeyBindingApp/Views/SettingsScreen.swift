@@ -19,7 +19,7 @@ struct SettingsScreen: View {
                 )
                 PermissionRow(
                     title: "Accessibility",
-                    details: "To turn one key combination into another.",
+                    details: "To turn one key combination into another and to fix the keyboard layout of typed text.",
                     granted: state.accessibilityGranted,
                     action: Permissions.openAccessibility
                 )

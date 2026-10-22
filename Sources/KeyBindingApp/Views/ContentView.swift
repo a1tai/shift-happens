@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case keyboard, monitor, remaps, combos, settings
+    case keyboard, monitor, remaps, combos, layoutFixer, settings
 
     var id: String { rawValue }
 
@@ -11,6 +11,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .monitor: return "Key Monitor"
         case .remaps: return "Remaps"
         case .combos: return "Combos"
+        case .layoutFixer: return "Layout Fixer"
         case .settings: return "Settings"
         }
     }
@@ -21,6 +22,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .monitor: return "waveform.path.ecg"
         case .remaps: return "arrow.left.arrow.right"
         case .combos: return "command"
+        case .layoutFixer: return "globe"
         case .settings: return "gearshape"
         }
     }
@@ -45,6 +47,9 @@ struct ContentView: View {
                     Label(SidebarItem.combos.title, systemImage: SidebarItem.combos.icon)
                         .badge(state.config.combos.count)
                         .tag(SidebarItem.combos)
+                    Label(SidebarItem.layoutFixer.title, systemImage: SidebarItem.layoutFixer.icon)
+                        .badge(state.config.layoutFixer.enabled ? Text("On") : nil)
+                        .tag(SidebarItem.layoutFixer)
                 }
                 Section {
                     Label(SidebarItem.settings.title, systemImage: SidebarItem.settings.icon)
@@ -62,6 +67,7 @@ struct ContentView: View {
                     case .monitor: MonitorScreen()
                     case .remaps: RemapsScreen()
                     case .combos: CombosScreen()
+                    case .layoutFixer: LayoutFixerScreen()
                     case .settings: SettingsScreen()
                     }
                 }
@@ -107,15 +113,20 @@ struct PermissionBanner: View {
                     action: Permissions.openInputMonitoring
                 )
             }
-            if !state.accessibilityGranted && state.config.combos.contains(where: \.enabled) {
+            if !state.accessibilityGranted && (usesCombos || state.config.layoutFixer.enabled) {
                 banner(
-                    text: "No Accessibility access: combos don't work.",
+                    text: usesCombos && state.config.layoutFixer.enabled
+                        ? "No Accessibility access: combos and the layout fixer don't work."
+                        : usesCombos ? "No Accessibility access: combos don't work."
+                        : "No Accessibility access: the layout fixer doesn't work.",
                     button: "Allow",
                     action: Permissions.openAccessibility
                 )
             }
         }
     }
+
+    private var usesCombos: Bool { state.config.combos.contains(where: \.enabled) }
 
     private func banner(text: String, button: String, action: @escaping () -> Void) -> some View {
         HStack(spacing: 12) {

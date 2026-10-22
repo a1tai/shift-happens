@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import Foundation
 
@@ -15,8 +16,8 @@ struct KeyLogEntry: Identifiable, Equatable {
     var macIgnoredIt: Bool { hid != nil && macKeyCode == nil && Date().timeIntervalSince(time) > 0.4 }
 }
 
-/// The app's single source of truth: saved config, live keyboard state and the two engines.
-final class AppState: ObservableObject {
+/// The app's single source of truth: saved config, live keyboard state and the engines.
+final class AppState: NSObject, ObservableObject {
     static let shared = AppState()
 
     @Published var config: AppConfig {
@@ -34,6 +35,9 @@ final class AppState: ObservableObject {
     @Published private(set) var accessibilityGranted = ComboEngine.hasAccess
     @Published private(set) var launchAtLogin = LaunchAgent.isEnabled
     @Published private(set) var lastError: String?
+    /// Enabled keyboard layouts and the current one, for the Layout Fixer screen.
+    @Published private(set) var inputSources: [InputSourceInfo] = []
+    @Published private(set) var currentInputSourceID: String?
 
     /// While set, the next physical key press goes here (the "press a key" buttons in editors).
     @Published var captureHandler: ((HIDKeyEvent) -> Void)?
@@ -42,14 +46,17 @@ final class AppState: ObservableObject {
 
     let hid = HIDMonitor()
     let combos = ComboEngine()
+    let layoutFixer = LayoutFixer()
 
     private var localMonitor: Any?
     private var permissionTimer: Timer?
     private var reapplyWork: DispatchWorkItem?
     private let hidutilQueue = DispatchQueue(label: "KeyBindingApp.hidutil")
+    private var layoutStatusItem: NSStatusItem?
 
-    private init() {
+    private override init() {
         config = ConfigStore.load()
+        super.init()
     }
 
     // MARK: - Lifecycle
@@ -72,6 +79,22 @@ final class AppState: ObservableObject {
             return self.handle(localEvent: event)
         }
 
+        // Keys meant for this app (recording a shortcut, the key monitor) must not switch the layout.
+        layoutFixer.isPaused = { [weak self] in
+            guard let self else { return false }
+            return self.combos.isPaused || (NSApp.isActive && self.swallowLocalKeys > 0)
+        }
+        let center = DistributedNotificationCenter.default()
+        let selectedChanged = kTISNotifySelectedKeyboardInputSourceChanged! as String
+        let enabledChanged = kTISNotifyEnabledKeyboardInputSourcesChanged! as String
+        for name in [selectedChanged, enabledChanged] {
+            center.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { [weak self] note in
+                if note.name.rawValue == enabledChanged { self?.layoutFixer.sources.invalidateCache() }
+                self?.refreshInputSources()
+            }
+        }
+        refreshInputSources()
+
         applyAll()
         refreshPermissions()
         // Permissions are granted in System Settings while the app runs; pick them up without a restart.
@@ -87,6 +110,7 @@ final class AppState: ObservableObject {
         if ax != accessibilityGranted { accessibilityGranted = ax }
         if input && !hid.isRunning { hid.start() }
         updateComboEngine()
+        updateLayoutFixer()
         let agent = LaunchAgent.isEnabled
         if agent != launchAtLogin { launchAtLogin = agent }
     }
@@ -104,6 +128,7 @@ final class AppState: ObservableObject {
             }
         }
         updateComboEngine()
+        updateLayoutFixer()
     }
 
     private func scheduleReapply() {
@@ -123,6 +148,49 @@ final class AppState: ObservableObject {
         } else if combos.isRunning {
             combos.stop()
         }
+    }
+
+    private func updateLayoutFixer() {
+        let settings = config.layoutFixer
+        if layoutFixer.trigger != settings.trigger { layoutFixer.trigger = settings.trigger }
+        if settings.enabled && accessibilityGranted {
+            if !layoutFixer.isRunning && !layoutFixer.start() {
+                lastError = "Couldn't start the layout fixer. Check the Accessibility permission."
+            }
+        } else if layoutFixer.isRunning {
+            layoutFixer.stop()
+        }
+        updateLayoutStatusItem()
+    }
+
+    private func refreshInputSources() {
+        let sources = layoutFixer.sources.enabled()
+        if sources != inputSources { inputSources = sources }
+        currentInputSourceID = layoutFixer.sources.currentID()
+        updateLayoutStatusItem()
+    }
+
+    /// A second menu bar item with the current layout (En / Ру), next to the keyboard icon.
+    private func updateLayoutStatusItem() {
+        guard config.layoutFixer.showsLayoutInMenuBar else {
+            if let item = layoutStatusItem { NSStatusBar.system.removeStatusItem(item) }
+            layoutStatusItem = nil
+            return
+        }
+        if layoutStatusItem == nil {
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            item.button?.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
+            item.button?.target = self
+            item.button?.action = #selector(switchLayoutFromMenuBar)
+            item.button?.toolTip = "Current keyboard layout. Click to switch."
+            layoutStatusItem = item
+        }
+        let current = inputSources.first { $0.id == currentInputSourceID }
+        layoutStatusItem?.button?.title = current?.shortLabel ?? "—"
+    }
+
+    @objc private func switchLayoutFromMenuBar() {
+        layoutFixer.sources.selectNext()
     }
 
     // MARK: - Editing

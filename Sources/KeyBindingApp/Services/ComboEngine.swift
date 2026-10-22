@@ -2,11 +2,16 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
+/// Values in eventSourceUserData that mark key events the app posts itself,
+/// so neither event tap reacts to the other's (or its own) output.
+enum SyntheticEvent {
+    static let combo: Int64 = 0x4B42_4150 // "KBAP"
+    static let layoutFixer: Int64 = 0x4B42_4C46 // "KBLF"
+}
+
 /// Turns one key combination into another with a CGEventTap.
 /// Needs the Accessibility permission (System Settings > Privacy & Security > Accessibility).
 final class ComboEngine {
-    /// Marks events we post ourselves so the tap lets them through.
-    private static let marker: Int64 = 0x4B42_4150 // "KBAP"
 
     var bindings: [ComboBinding] = []
     /// Temporarily lets every key through, e.g. while the user records a new shortcut.
@@ -67,7 +72,7 @@ final class ComboEngine {
             return Unmanaged.passUnretained(event)
         }
 
-        if isPaused || event.getIntegerValueField(.eventSourceUserData) == Self.marker {
+        if isPaused || [SyntheticEvent.combo, SyntheticEvent.layoutFixer].contains(event.getIntegerValueField(.eventSourceUserData)) {
             return Unmanaged.passUnretained(event)
         }
 
@@ -96,7 +101,7 @@ final class ComboEngine {
         for isDown in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: chord.keyCode, keyDown: isDown) else { continue }
             event.flags = flags
-            event.setIntegerValueField(.eventSourceUserData, value: Self.marker)
+            event.setIntegerValueField(.eventSourceUserData, value: SyntheticEvent.combo)
             // Posting at the HID level lets system shortcuts (screenshots, Mission Control) react too.
             event.post(tap: .cghidEventTap)
         }

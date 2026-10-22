@@ -104,6 +104,39 @@ struct ComboBinding: Codable, Hashable, Identifiable {
     var enabled = true
 }
 
+/// The key whose lone press fixes the layout of the last word or selection.
+enum LayoutTrigger: String, Codable, CaseIterable, Identifiable {
+    case bothOptions, leftOption, rightOption, fn, capsLock
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .bothOptions: return "Either Option ⌥"
+        case .leftOption: return "Left Option ⌥"
+        case .rightOption: return "Right Option ⌥"
+        case .fn: return "fn 🌐"
+        case .capsLock: return "Caps Lock ⇪"
+        }
+    }
+}
+
+struct LayoutFixerSettings: Codable, Equatable {
+    var enabled = false
+    var trigger: LayoutTrigger = .bothOptions
+    /// Shows the current layout (En / Ру) as a separate menu bar item.
+    var showsLayoutInMenuBar = false
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        trigger = (try? c.decodeIfPresent(LayoutTrigger.self, forKey: .trigger)) ?? .bothOptions
+        showsLayoutInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .showsLayoutInMenuBar) ?? false
+    }
+}
+
 /// Everything the app saves to disk.
 struct AppConfig: Codable, Equatable {
     var remaps: [KeyRemap] = []
@@ -112,4 +145,17 @@ struct AppConfig: Codable, Equatable {
     var enabled = true
     /// Devices we have applied per-device mappings to, so they can be cleared later.
     var knownDevices: [DeviceRef] = []
+    var layoutFixer = LayoutFixerSettings()
+
+    init() {}
+
+    // Every field is optional so config files from older versions keep loading.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        remaps = try c.decodeIfPresent([KeyRemap].self, forKey: .remaps) ?? []
+        combos = try c.decodeIfPresent([ComboBinding].self, forKey: .combos) ?? []
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        knownDevices = try c.decodeIfPresent([DeviceRef].self, forKey: .knownDevices) ?? []
+        layoutFixer = try c.decodeIfPresent(LayoutFixerSettings.self, forKey: .layoutFixer) ?? LayoutFixerSettings()
+    }
 }
