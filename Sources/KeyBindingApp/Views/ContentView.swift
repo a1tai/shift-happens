@@ -47,6 +47,8 @@ struct ContentView: View {
                     Label(SidebarItem.combos.title, systemImage: SidebarItem.combos.icon)
                         .badge(state.config.combos.count)
                         .tag(SidebarItem.combos)
+                }
+                Section("Tools") {
                     Label(SidebarItem.layoutFixer.title, systemImage: SidebarItem.layoutFixer.icon)
                         .badge(state.config.layoutFixer.enabled ? Text("On") : nil)
                         .tag(SidebarItem.layoutFixer)

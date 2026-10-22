@@ -66,10 +66,13 @@ struct LayoutFixerScreen: View {
                 } header: {
                     Text("Keyboard layouts")
                 } footer: {
-                    Text("With three or more layouts, each press moves to the next one in this list. "
-                         + "Based on Perekluk by abaskalov (MIT License).")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("With three or more layouts, each press moves to the next one in this list.")
+                        // A literal, so SwiftUI renders the Markdown links.
+                        Text("Based on [Perekluk](https://github.com/abaskalov/perekluk) by [abaskalov](https://github.com/abaskalov) (MIT License).")
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
