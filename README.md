@@ -7,7 +7,7 @@ Bindings are saved and restored after a restart.
 
 ## Features
 
-- **Keyboard.** A drawn Windows keyboard: remapped keys are highlighted in blue and labeled with their new value,
+- **Keyboard.** A drawn MacBook keyboard, or a full-size Windows keyboard via the Mac | Windows switch (both show the same remaps): remapped keys are highlighted in blue and labeled with their new value,
   keys with combos are marked in purple, and keys you are pressing light up green. Click a key to open the editor.
 - **Key Monitor.** For each key press: the HID code (what the keyboard sends), the macOS key code, the character and the keyboard name.
   If the keyboard sent a key that macOS never received, you see it right away.

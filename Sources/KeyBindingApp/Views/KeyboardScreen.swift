@@ -1,12 +1,15 @@
 import SwiftUI
 
-/// The drawn Windows keyboard: shows what each key does now and lets you click a key to change it.
+/// The drawn keyboard, Mac or Windows: shows what each key does now and lets you click a key to change it.
 struct KeyboardScreen: View {
     @EnvironmentObject private var state: AppState
     /// nil = remaps for every keyboard.
     @State private var deviceID: String?
     @State private var editing: KeyRemap?
-    @State private var hovered: UInt32?
+    @State private var hovered: UInt64?
+    @AppStorage("keyboardStyle") private var style: KeyboardLayout.Style = .mac
+
+    private var layout: KeyboardLayout { style.layout }
 
     private var device: DeviceRef? { state.keyboardChoices.first { $0.id == deviceID } }
 
@@ -14,17 +17,18 @@ struct KeyboardScreen: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                KeyboardGrid { unit in
-                    ForEach(KeyboardLayout.keys) { cap in
+                KeyboardGrid(layout: layout) { unit in
+                    ForEach(layout.keys) { cap in
                         KeyCapView(
                             cap: cap,
+                            style: style,
                             unit: unit,
                             remap: remap(for: cap),
                             comboCount: comboCount(for: cap),
                             isPressed: state.pressedKeys.contains(cap.hid.hidutilValue),
-                            isHovered: hovered == cap.usage
+                            isHovered: hovered == cap.id
                         )
-                        .onHover { hovered = $0 ? cap.usage : (hovered == cap.usage ? nil : hovered) }
+                        .onHover { hovered = $0 ? cap.id : (hovered == cap.id ? nil : hovered) }
                         .onTapGesture { edit(cap) }
                         .help(tooltip(for: cap))
                     }
@@ -38,7 +42,7 @@ struct KeyboardScreen: View {
         }
         .onAppear {
             state.setKeyboardScreenOpen(true)
-            if DebugSnapshot.opensEditor, let esc = KeyboardLayout.keys.first { edit(esc) }
+            if DebugSnapshot.opensEditor, let esc = layout.keys.first { edit(esc) }
         }
         .onDisappear { state.setKeyboardScreenOpen(false) }
         .sheet(item: $editing) { remap in
@@ -54,12 +58,19 @@ struct KeyboardScreen: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Picker("Layout", selection: $style) {
+                ForEach(KeyboardLayout.Style.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Draw a Mac or a Windows keyboard. Both show the same remaps.")
             Picker("Keyboard", selection: $deviceID) {
                 Text("All keyboards").tag(String?.none)
                 if !state.keyboardChoices.isEmpty { Divider() }
                 DevicePickerItems(devices: state.keyboardChoices)
             }
-            .frame(maxWidth: 280)
+            .frame(maxWidth: 260)
         }
     }
 
@@ -79,7 +90,7 @@ struct KeyboardScreen: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let usage = hovered, let cap = KeyboardLayout.keys.first(where: { $0.usage == usage }) {
+        if let id = hovered, let cap = layout.keys.first(where: { $0.id == id }) {
             GroupBox {
                 HStack(alignment: .top, spacing: 24) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -143,12 +154,15 @@ struct KeyboardScreen: View {
 /// Keys never get smaller than `minUnit`; below that the keyboard scrolls horizontally instead.
 private struct KeyboardGrid<Content: View>: View {
     static var minUnit: CGFloat { 24 }
+    /// The small Mac keyboard would get huge keys in a wide window.
+    static var maxUnit: CGFloat { 64 }
+    let layout: KeyboardLayout
     @ViewBuilder let content: (CGFloat) -> Content
     @State private var unit: CGFloat = 40
 
     var body: some View {
         ScrollView(.horizontal) {
-            KeyCapLayout(unit: unit) { content(unit) }
+            KeyCapLayout(layout: layout, unit: unit) { content(unit) }
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .background(GeometryReader { proxy in
@@ -159,22 +173,23 @@ private struct KeyboardGrid<Content: View>: View {
     }
 
     private func update(_ width: CGFloat) {
-        let fitted = max(Self.minUnit, (width / KeyboardLayout.width).rounded(.down))
+        let fitted = min(Self.maxUnit, max(Self.minUnit, (width / layout.width).rounded(.down)))
         if fitted != unit { unit = fitted }
     }
 }
 
-/// Places subviews in the order of `KeyboardLayout.keys`, with a small gap between caps.
+/// Places subviews in the order of the layout's keys, with a small gap between caps.
 private struct KeyCapLayout: Layout {
+    let layout: KeyboardLayout
     let unit: CGFloat
     private let gap: CGFloat = 4
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        CGSize(width: KeyboardLayout.width * unit, height: KeyboardLayout.height * unit)
+        CGSize(width: layout.width * unit, height: layout.height * unit)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for (cap, subview) in zip(KeyboardLayout.keys, subviews) {
+        for (cap, subview) in zip(layout.keys, subviews) {
             subview.place(
                 at: CGPoint(x: bounds.minX + cap.x * unit + gap / 2, y: bounds.minY + cap.y * unit + gap / 2),
                 proposal: ProposedViewSize(width: cap.width * unit - gap, height: cap.height * unit - gap)
@@ -185,6 +200,7 @@ private struct KeyCapLayout: Layout {
 
 private struct KeyCapView: View {
     let cap: KeyCap
+    let style: KeyboardLayout.Style
     let unit: CGFloat
     let remap: KeyRemap?
     let comboCount: Int
@@ -200,6 +216,13 @@ private struct KeyCapView: View {
 
     private var fontSize: CGFloat { max(9, unit * 0.28) }
 
+    /// The cap's own text: one line, or a glyph above a word ("⌘" / "command").
+    private var lines: [String] { (cap.label ?? KeyCatalog.label(for: cap.hid)).components(separatedBy: "\n") }
+
+    private func label(for usage: HIDUsage) -> String {
+        (style == .mac ? KeyboardLayout.macLabel(for: usage) : nil) ?? KeyCatalog.label(for: usage)
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: unit * 0.16, style: .continuous)
@@ -209,14 +232,22 @@ private struct KeyCapView: View {
                 .strokeBorder(isHovered ? Color.accentColor : (tint ?? Color.primary.opacity(0.12)),
                               lineWidth: isHovered ? 2 : 1)
             VStack(spacing: unit * 0.04) {
-                Text(KeyCatalog.label(for: cap.hid))
-                    .font(.system(size: remap == nil ? fontSize : fontSize * 0.85, weight: .medium))
-                    .strikethrough(remap?.enabled == true, color: .secondary)
-                    .foregroundStyle(remap?.enabled == true ? .secondary : .primary)
                 if let remap {
-                    Text(KeyCatalog.label(for: remap.to))
+                    Text(lines.joined(separator: " "))
+                        .font(.system(size: fontSize * 0.7, weight: .medium))
+                        .strikethrough(remap.enabled, color: .secondary)
+                        .foregroundStyle(remap.enabled ? .secondary : .primary)
+                    Text(label(for: remap.to))
                         .font(.system(size: fontSize, weight: .bold))
                         .foregroundStyle(remap.enabled ? Color.accentColor : .secondary)
+                } else {
+                    Text(lines[0])
+                        .font(.system(size: lines.count > 1 ? fontSize * 0.9 : fontSize, weight: .medium))
+                    if lines.count > 1 {
+                        Text(lines[1])
+                            .font(.system(size: fontSize * 0.55, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .lineLimit(1)
