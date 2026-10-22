@@ -189,54 +189,61 @@ enum DebugSnapshot {
         check("modifier alone records nothing", ChordTracker().modifierOnlyIsNil())
         check("system shortcut switch is available on this macOS", SystemShortcuts.isAvailable)
 
-        // Macro recording: down+up collapse into one press, modifiers fold in, pauses become delays.
+        // Macro recording: every key event as it happened, modifiers included, with the pauses between.
         let t0 = Date(timeIntervalSince1970: 1000)
         func at(_ ms: Double) -> Date { t0.addingTimeInterval(ms / 1000) }
-        var rec = MacroRecorder(recordsDelays: true)
+        func down(_ code: UInt16) -> MacroStep { .keyDown(KeyChord(keyCode: code, modifiers: [])) }
+        func up(_ code: UInt16) -> MacroStep { .keyUp(KeyChord(keyCode: code, modifiers: [])) }
+        var rec = MacroRecorder(recordsDelays: false)
         rec.handle(hid(0xE3), isDown: true, at: at(0))      // ⌘ down
-        rec.handle(hid(0x06), isDown: true, at: at(10))     // C
-        rec.handle(hid(0x06), isDown: false, at: at(60))
-        rec.handle(hid(0xE3), isDown: false, at: at(80))
-        rec.handle(hid(0x19), isDown: true, at: at(330))    // V after 250 ms
-        rec.handle(hid(0x19), isDown: false, at: at(380))
-        check("recorded ⌘C, 250 ms, V", rec.steps == [.press(KeyChord(keyCode: 0x08, modifiers: .command)), .delay(250),
-                                                     .press(KeyChord(keyCode: 0x09, modifiers: []))], "\(rec.steps)")
-        var noDelays = MacroRecorder(recordsDelays: false)
-        noDelays.handle(hid(0x04), isDown: true, at: at(0)); noDelays.handle(hid(0x04), isDown: false, at: at(5))
-        noDelays.handle(hid(0x05), isDown: true, at: at(900)); noDelays.handle(hid(0x05), isDown: false, at: at(950))
-        check("no delays when off", !noDelays.steps.contains { $0.isDelay } && noDelays.steps.count == 2)
-        var hold = MacroRecorder(recordsDelays: false)
-        hold.handle(hid(0x04), isDown: true, at: at(0)); hold.handle(hid(0x05), isDown: true, at: at(10))
-        hold.handle(hid(0x05), isDown: false, at: at(20)); hold.handle(hid(0x04), isDown: false, at: at(30))
-        check("overlapping keys stay down/up", hold.steps == [.keyDown(KeyChord(keyCode: 0x00, modifiers: [])),
-                                                              .press(KeyChord(keyCode: 0x0B, modifiers: [])),
-                                                              .keyUp(KeyChord(keyCode: 0x00, modifiers: []))], "\(hold.steps)")
-        var lone = MacroRecorder(recordsDelays: false)
-        lone.handle(hid(0xE1), isDown: true, at: at(0)); lone.handle(hid(0xE1), isDown: false, at: at(50))
-        check("lone modifier is a press", lone.steps == [.press(KeyChord(keyCode: 0x38, modifiers: []))], "\(lone.steps)")
-
-        var twice = MacroRecorder(recordsDelays: true)
+        rec.handle(hid(0x06), isDown: true, at: at(10))     // C down
+        rec.handle(hid(0x06), isDown: false, at: at(60))    // C up
+        rec.handle(hid(0xE3), isDown: false, at: at(80))    // ⌘ up
+        check("⌘C is four key events", rec.steps == [down(0x37), down(0x08), up(0x08), up(0x37)], "\(rec.steps)")
+        var timed = MacroRecorder(recordsDelays: true)
+        timed.handle(hid(0x04), isDown: true, at: at(0)); timed.handle(hid(0x04), isDown: false, at: at(50))
+        timed.handle(hid(0x05), isDown: true, at: at(300)); timed.handle(hid(0x05), isDown: false, at: at(303))
+        check("delays between events", timed.steps == [down(0x00), .delay(50), up(0x00), .delay(250), down(0x0B), up(0x0B)],
+              "\(timed.steps)")
+        var arrows = MacroRecorder(recordsDelays: false)
+        arrows.handle(hid(0xE1), isDown: true, at: at(0))
+        for i in 0..<3 {
+            arrows.handle(hid(0x4F), isDown: true, at: at(Double(10 + i * 20)))
+            arrows.handle(hid(0x4F), isDown: false, at: at(Double(20 + i * 20)))
+        }
+        arrows.handle(hid(0xE1), isDown: false, at: at(90))
+        check("⇧ held over → → →", arrows.steps == [down(0x38)] + Array(repeating: [down(0x7C), up(0x7C)], count: 3).flatMap { $0 }
+              + [up(0x38)], "\(arrows.steps)")
+        var twice = MacroRecorder(recordsDelays: false)
         twice.handle(hid(0x0A), isDown: true, at: at(0)); twice.handle(hid(0x0A), isDown: true, at: at(70))
         twice.handle(hid(0x0A), isDown: false, at: at(100)); twice.handle(hid(0x0A), isDown: false, at: at(101))
-        check("a key reported twice is one press", twice.steps == [.press(KeyChord(keyCode: 0x05, modifiers: []))], "\(twice.steps)")
-        let messy = [MacroStep.keyDown(KeyChord(keyCode: 5, modifiers: [])), .delay(10), .keyUp(KeyChord(keyCode: 5, modifiers: [])),
-                     .delay(250), .press(KeyChord(keyCode: 9, modifiers: .command))].map { MacroItem(step: $0) }
-        check("simplify", messy.simplified(minimumDelay: 30).map(\.step) == [.press(KeyChord(keyCode: 5, modifiers: [])), .delay(250),
-                                                                         .press(KeyChord(keyCode: 9, modifiers: .command))])
+        check("a key reported twice counts once", twice.steps == [down(0x05), up(0x05)], "\(twice.steps)")
 
-        // Saving macros, and combos saved before macros existed.
+        // Clean-up only touches delays; unmatched keys are found.
+        let messy = [down(5), .delay(10), up(5), .delay(250), .delay(100), down(9), up(9)].map { MacroItem(step: $0) }
+        check("clean up delays", messy.withoutShortDelays(below: 30).map(\.step) == [down(5), up(5), .delay(350), down(9), up(9)])
+        let unmatched = [down(0x37), up(0x08)].map { MacroItem(step: $0) }.unmatchedKeys
+        check("unmatched keys", unmatched.neverReleased.map(\.keyCode) == [0x37] && unmatched.upWithoutDown.map(\.keyCode) == [0x08])
+        check("shortcut as key events", MacroStep.events(for: KeyChord(keyCode: 0x08, modifiers: [.command, .shift]))
+              == [down(0x38), down(0x37), down(0x08), up(0x08), up(0x37), up(0x38)])
+
+        // Saving macros, and older saved forms.
         var macroCombo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []), output: KeyChord(keyCode: 0, modifiers: []))
-        macroCombo.macro = rec.steps.map { MacroItem(step: $0) } + [MacroItem(step: .text("Hi")),
-                                                                    MacroItem(step: .keyDown(KeyChord(keyCode: 0x38, modifiers: [])))]
+        macroCombo.macro = (rec.steps + [.delay(100), .text("Hi"), down(0x38)]).map { MacroItem(step: $0) }
         macroCombo.stepDelay = 20
         let decodedCombo = (try? JSONEncoder().encode(macroCombo)).flatMap { try? JSONDecoder().decode(ComboBinding.self, from: $0) }
         check("macro round-trip", decodedCombo == macroCombo)
         let oldCombo = #"{"id":"21111111-1111-1111-1111-111111111111","trigger":{"keyCode":105,"modifiers":0},"output":{"keyCode":21,"modifiers":12},"note":"","enabled":true}"#
         let decodedOld = try? JSONDecoder().decode(ComboBinding.self, from: Data(oldCombo.utf8))
         check("old combo loads as a shortcut", decodedOld?.isMacro == false && decodedOld?.output.keyCode == 21)
-        check("summary", macroCombo.outputSummary == "⌘C · 250 ms · V · “Hi” · Shift down", macroCombo.outputSummary)
+        var pressCombo = macroCombo
+        pressCombo.macro = [MacroItem(step: .press(KeyChord(keyCode: 0x09, modifiers: .command)))]
+        let migrated = (try? JSONEncoder().encode(pressCombo)).flatMap { try? JSONDecoder().decode(ComboBinding.self, from: $0) }
+        check("press steps load as key events", migrated?.macro.map(\.step) == [down(0x37), down(0x09), up(0x09), up(0x37)],
+              "\(String(describing: migrated?.macro.map(\.step)))")
+        check("summary", macroCombo.outputSummary == "⌘↓ · C↓ · C↑ · ⌘↑ · 100 ms · “Hi” · ⇧↓", macroCombo.outputSummary)
 
-        // Playback: order, delays, and every held key released at the end.
+        // Playback: order, held modifiers applied to later keys, everything released at the end.
         final class FakePoster: KeyEventPosting {
             var log: [String] = []
             func key(_ keyCode: UInt16, down: Bool, modifiers: ModifierSet) { log.append("\(modifiers.symbols)\(keyCode)\(down ? "↓" : "↑")") }
@@ -245,13 +252,12 @@ enum DebugSnapshot {
         }
         let fake = FakePoster()
         MacroPlayer.run(macroCombo.macro.map(\.step), stepDelay: 20, poster: fake) { false }
-        check("playback order and timing", fake.log == ["⌘8↓", "⌘8↑", "wait:250", "9↓", "9↑", "wait:20", "text:Hi", "wait:20",
-                                                         "56↓", "56↑"], "\(fake.log)")
+        check("playback order, modifiers and release", fake.log == ["⌘55↓", "wait:20", "⌘8↓", "wait:20", "⌘8↑", "wait:20", "55↑",
+                                                                     "wait:100", "text:Hi", "wait:20", "⇧56↓", "56↑"], "\(fake.log)")
         let cancelled = FakePoster()
         var calls = 0
-        MacroPlayer.run([.keyDown(KeyChord(keyCode: 0x38, modifiers: [])), .delay(10), .press(KeyChord(keyCode: 0, modifiers: []))],
-                        stepDelay: 0, poster: cancelled) { calls += 1; return calls > 2 }
-        check("cancelled macro releases held keys", cancelled.log == ["56↓", "wait:10", "56↑"], "\(cancelled.log)")
+        MacroPlayer.run([down(0x38), .delay(10), down(0x00), up(0x00)], stepDelay: 0, poster: cancelled) { calls += 1; return calls > 2 }
+        check("cancelled macro releases held keys", cancelled.log == ["⇧56↓", "wait:10", "56↑"], "\(cancelled.log)")
 
         // Config files from before the layout fixer still load.
         let old = #"{"enabled":true,"remaps":[],"combos":[],"knownDevices":[]}"#

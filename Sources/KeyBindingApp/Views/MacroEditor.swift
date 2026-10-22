@@ -11,6 +11,8 @@ struct MacroEditor: View {
     @State private var confirmClear = false
     @State private var showsSimplify = false
     @State private var simplifyBelow = 30
+    @State private var showsShortcutInsert = false
+    @State private var shortcutToInsert = KeyChord(keyCode: 0x08, modifiers: .command)
 
     private var isRecording: Bool { state.activeRecorder == recorderID }
     static let delayPresets = [50, 100, 250, 500, 1000]
@@ -72,19 +74,24 @@ struct MacroEditor: View {
     private var toolbar: some View {
         HStack(spacing: 2) {
             Menu {
-                Button("Key Press") { add(.press(KeyChord(keyCode: 0x00, modifiers: []))) }
-                Button("Key Down") { add(.keyDown(KeyChord(keyCode: 0x38, modifiers: []))) }
-                Button("Key Up") { add(.keyUp(KeyChord(keyCode: 0x38, modifiers: []))) }
+                Button("Key Down") { add([.keyDown(KeyChord(keyCode: 0x00, modifiers: []))]) }
+                Button("Key Up") { add([.keyUp(KeyChord(keyCode: 0x00, modifiers: []))]) }
+                Button("Delay") { add([.delay(100)]) }
+                Button("Type Text") { add([.text("")]) }
                 Divider()
-                Button("Delay") { add(.delay(100)) }
-                Button("Type Text") { add(.text("")) }
+                Button("Key Press (Down + Up)") {
+                    let key = KeyChord(keyCode: 0x00, modifiers: [])
+                    add([.keyDown(key), .keyUp(key)])
+                }
+                Button("Shortcut…") { showsShortcutInsert = true }
             } label: {
                 Image(systemName: "plus")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .frame(width: 30)
-            .help("Add a step after the selection")
+            .help("Add steps after the selection")
+            .popover(isPresented: $showsShortcutInsert, arrowEdge: .bottom) { shortcutPopover }
 
             toolButton("minus", help: "Remove the selected steps (Delete)", disabled: selection.isEmpty) { remove(selection) }
             toolButton("plus.square.on.square", help: "Duplicate the selected steps (⌘D)", disabled: selection.isEmpty) {
@@ -96,7 +103,7 @@ struct MacroEditor: View {
             toolButton("timer", help: "Insert a 100 ms delay after the selection") {
                 combo.macro.insert(MacroItem(step: .delay(100)), at: insertionIndex)
             }
-            toolButton("wand.and.stars", help: "Simplify: merge key down + up into presses, drop short delays",
+            toolButton("wand.and.stars", help: "Remove short delays and merge delays that follow each other",
                        disabled: combo.macro.isEmpty) { showsSimplify = true }
                 .popover(isPresented: $showsSimplify, arrowEdge: .bottom) { simplifyPopover }
             toolButton("trash", help: "Remove all steps", disabled: combo.macro.isEmpty) { confirmClear = true }
@@ -141,6 +148,12 @@ struct MacroEditor: View {
             .fixedSize()
             .help("Holding the trigger key plays the macro once, or again and again")
             Spacer()
+            if let warning = unmatchedWarning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                    .lineLimit(1)
+                    .help("Playback still releases every key at the end, so nothing stays stuck.")
+            }
             Text(counted(combo.macro.count, "step") + " · \(combo.macro.duration(stepDelay: combo.stepDelay)) ms")
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -148,6 +161,14 @@ struct MacroEditor: View {
         .font(.callout)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+
+    /// A short note about key steps that don't pair up (not an error; playback releases everything).
+    private var unmatchedWarning: String? {
+        let (upWithoutDown, neverReleased) = combo.macro.unmatchedKeys
+        if let key = neverReleased.first { return "\(key.keyName) is never released" }
+        if let key = upWithoutDown.first { return "\(key.keyName) is released without being pressed" }
+        return nil
     }
 
     private func toolButton(_ icon: String, help: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
@@ -161,15 +182,15 @@ struct MacroEditor: View {
 
     private var simplifyPopover: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Simplify").font(.headline)
-            Text("Turns a key down followed by its key up into one press,\nand removes delays shorter than:")
+            Text("Clean Up Delays").font(.headline)
+            Text("Removes delays shorter than this and merges delays\nthat follow each other. Key steps stay as they are.")
                 .foregroundStyle(.secondary)
             HStack {
                 TextField("", value: $simplifyBelow, format: .number).frame(width: 60).multilineTextAlignment(.trailing)
                 Text("ms")
                 Spacer()
-                Button("Simplify") {
-                    combo.macro = combo.macro.simplified(minimumDelay: simplifyBelow)
+                Button("Clean Up") {
+                    combo.macro = combo.macro.withoutShortDelays(below: simplifyBelow)
                     selection.removeAll()
                     showsSimplify = false
                 }
@@ -180,12 +201,31 @@ struct MacroEditor: View {
         .frame(width: 320)
     }
 
+    private var shortcutPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Insert Shortcut").font(.headline)
+            Text("Adds its key events: modifiers down, key down, key up, modifiers up.")
+                .foregroundStyle(.secondary)
+            ChordEditor(chord: $shortcutToInsert, compact: true)
+            HStack {
+                Spacer()
+                Button("Insert") {
+                    add(MacroStep.events(for: shortcutToInsert))
+                    showsShortcutInsert = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(width: 420)
+    }
+
     // MARK: - Editing
 
-    private func add(_ step: MacroStep) {
-        let item = MacroItem(step: step)
-        combo.macro.insert(item, at: insertionIndex)
-        selection = [item.id]
+    private func add(_ steps: [MacroStep]) {
+        let items = steps.map { MacroItem(step: $0) }
+        combo.macro.insert(contentsOf: items, at: insertionIndex)
+        selection = Set(items.map(\.id))
     }
 
     private func remove(_ ids: Set<UUID>) {
@@ -231,20 +271,20 @@ struct MacroEditor: View {
     }
 }
 
-/// One editable macro step, in columns: icon and type, then the key or value.
+/// One editable macro step, in columns: direction or type, then the key or value.
 private struct MacroStepRow: View {
     @Binding var item: MacroItem
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(iconColor)
                 .frame(width: 18)
             Text(kind)
                 .frame(width: 72, alignment: .leading)
             switch item.step {
-            case .press, .keyDown, .keyUp:
-                ChordEditor(chord: chordBinding, allowsModifierKeys: true, compact: true)
+            case .keyDown, .keyUp, .press:
+                MacroKeyField(key: keyBinding)
             case .delay:
                 TextField("", value: delayBinding, format: .number)
                     .frame(width: 70)
@@ -273,8 +313,8 @@ private struct MacroStepRow: View {
     private var kind: String {
         switch item.step {
         case .press: return "Press"
-        case .keyDown: return "Key down"
-        case .keyUp: return "Key up"
+        case .keyDown: return "Down"
+        case .keyUp: return "Up"
         case .delay: return "Delay"
         case .text: return "Type text"
         }
@@ -283,14 +323,22 @@ private struct MacroStepRow: View {
     private var icon: String {
         switch item.step {
         case .press: return "keyboard"
-        case .keyDown: return "arrow.down.to.line"
-        case .keyUp: return "arrow.up.to.line"
+        case .keyDown: return "arrow.down"
+        case .keyUp: return "arrow.up"
         case .delay: return "timer"
         case .text: return "textformat"
         }
     }
 
-    private var chordBinding: Binding<KeyChord> {
+    private var iconColor: Color {
+        switch item.step {
+        case .keyDown: return .accentColor
+        case .keyUp: return .orange
+        default: return .secondary
+        }
+    }
+
+    private var keyBinding: Binding<KeyChord> {
         Binding(
             get: {
                 switch item.step {
@@ -298,11 +346,11 @@ private struct MacroStepRow: View {
                 default: return KeyChord(keyCode: 0, modifiers: [])
                 }
             },
-            set: { chord in
+            set: { key in
                 switch item.step {
-                case .press: item.step = .press(chord)
-                case .keyDown: item.step = .keyDown(chord)
-                case .keyUp: item.step = .keyUp(chord)
+                case .press: item.step = .press(key)
+                case .keyDown: item.step = .keyDown(key)
+                case .keyUp: item.step = .keyUp(key)
                 default: break
                 }
             }
@@ -321,5 +369,39 @@ private struct MacroStepRow: View {
             get: { if case .text(let text) = item.step { return text } else { return "" } },
             set: { item.step = .text($0) }
         )
+    }
+}
+
+/// One key of a macro step, modifiers included as keys of their own: click to press it, or pick it.
+private struct MacroKeyField: View {
+    @EnvironmentObject private var state: AppState
+    @Binding var key: KeyChord
+    @State private var recorderID = UUID()
+
+    private var isRecording: Bool { state.activeRecorder == recorderID }
+
+    var body: some View {
+        KeyFieldShell(text: key.keyName, isRecording: isRecording, minWidth: 190, onClick: toggle) {
+            KeyMenuItems(keys: KeyCatalog.chordKeysWithModifiers) { def in
+                if let code = def.macKeyCode { key = KeyChord(keyCode: code, modifiers: []) }
+            }
+        }
+        .help(isRecording ? "Press a key. Esc cancels." : "Click and press a key, or pick one with the arrow")
+        .onDisappear { state.stopRecording(recorderID) }
+    }
+
+    private func toggle() {
+        if isRecording {
+            state.stopRecording(recorderID)
+        } else if state.inputMonitoringGranted {
+            state.startRecording(recorderID)
+            state.captureHandler = { event in
+                // The key as macOS sees it, after the remaps.
+                if let code = KeyCatalog.key(for: state.remapped(event.usage, from: event.device))?.macKeyCode {
+                    key = KeyChord(keyCode: code, modifiers: [])
+                }
+                state.stopRecording(recorderID)
+            }
+        }
     }
 }

@@ -18,6 +18,8 @@ struct CGEventPoster: KeyEventPosting {
 
     func key(_ keyCode: UInt16, down: Bool, modifiers: ModifierSet) {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: down) else { return }
+        // A modifier key going down or up is a change of the modifier flags, as from a real keyboard.
+        if MacroPlayer.modifier(forKeyCode: keyCode) != nil { event.type = .flagsChanged }
         event.flags = modifiers.cgFlags
         event.setIntegerValueField(.eventSourceUserData, value: SyntheticEvent.combo)
         event.post(tap: .cghidEventTap)
@@ -84,25 +86,47 @@ final class MacroPlayer {
         lock.unlock()
     }
 
-    /// Plays steps in order. Whatever happens, every key the macro pressed is released at the end,
+    /// The modifier a key code stands for, if it is a modifier key.
+    static func modifier(forKeyCode code: UInt16) -> ModifierSet? {
+        switch code {
+        case 0x37, 0x36: return .command
+        case 0x38, 0x3C: return .shift
+        case 0x3A, 0x3D: return .option
+        case 0x3B, 0x3E: return .control
+        case 0x3F: return .function
+        default: return nil
+        }
+    }
+
+    /// Plays steps in order. Modifier keys the macro holds down apply to the keys after them, as on a
+    /// keyboard. Whatever happens, every key the macro pressed is released at the end, modifiers last,
     /// so nothing stays stuck down.
     static func run(_ steps: [MacroStep], stepDelay: Int, poster: KeyEventPosting, isCancelled: () -> Bool) {
-        var held: [UInt16: ModifierSet] = [:]
+        var held: [UInt16] = []
+        func modifiers() -> ModifierSet {
+            held.compactMap(modifier(forKeyCode:)).reduce(into: ModifierSet()) { $0.insert($1) }
+        }
+        func down(_ code: UInt16, extra: ModifierSet = []) {
+            if !held.contains(code) { held.append(code) }
+            poster.key(code, down: true, modifiers: modifiers().union(extra))
+        }
+        func up(_ code: UInt16, extra: ModifierSet = []) {
+            held.removeAll { $0 == code }
+            poster.key(code, down: false, modifiers: modifiers().union(extra))
+        }
         defer {
-            for (keyCode, modifiers) in held { poster.key(keyCode, down: false, modifiers: modifiers) }
+            for code in held.reversed() { up(code) }
         }
         for (index, step) in steps.enumerated() {
             if isCancelled() { return }
             switch step {
             case .press(let chord):
-                poster.key(chord.keyCode, down: true, modifiers: chord.modifiers)
-                poster.key(chord.keyCode, down: false, modifiers: chord.modifiers)
-            case .keyDown(let chord):
-                poster.key(chord.keyCode, down: true, modifiers: chord.modifiers)
-                held[chord.keyCode] = chord.modifiers
-            case .keyUp(let chord):
-                poster.key(chord.keyCode, down: false, modifiers: held[chord.keyCode] ?? chord.modifiers)
-                held[chord.keyCode] = nil
+                down(chord.keyCode, extra: chord.modifiers)
+                up(chord.keyCode, extra: chord.modifiers)
+            case .keyDown(let key):
+                down(key.keyCode)
+            case .keyUp(let key):
+                up(key.keyCode)
             case .delay(let ms):
                 poster.wait(milliseconds: ms)
             case .text(let text):

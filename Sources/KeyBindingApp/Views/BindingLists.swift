@@ -152,12 +152,9 @@ struct CombosScreen: View {
                 var combo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []),
                                          output: KeyChord(keyCode: 0x15, modifiers: [.command, .shift]))
                 if DebugSnapshot.opensMacroEditor {
-                    combo.macro = [MacroItem(step: .press(KeyChord(keyCode: 0x08, modifiers: .command))),
-                                   MacroItem(step: .delay(100)),
-                                   MacroItem(step: .keyDown(KeyChord(keyCode: 0x38, modifiers: []))),
-                                   MacroItem(step: .press(KeyChord(keyCode: 0x09, modifiers: .command))),
-                                   MacroItem(step: .keyUp(KeyChord(keyCode: 0x38, modifiers: []))),
-                                   MacroItem(step: .text("Hello"))]
+                    combo.macro = (MacroStep.events(for: KeyChord(keyCode: 0x08, modifiers: .command)) + [.delay(100)]
+                                   + MacroStep.events(for: KeyChord(keyCode: 0x09, modifiers: .command)) + [.text("Hello")])
+                        .map { MacroItem(step: $0) }
                 }
                 editing = combo
             }

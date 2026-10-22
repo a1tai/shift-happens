@@ -121,7 +121,21 @@ struct KeyChord: Codable, Hashable {
     var keyCode: UInt16
     var modifiers: ModifierSet
 
-    var display: String { modifiers.symbols + KeyCatalog.name(forMacKeyCode: keyCode) }
+    var display: String { modifiers.symbols + (KeyChord.modifierSymbols[keyCode] ?? KeyCatalog.name(forMacKeyCode: keyCode)) }
+
+    /// Modifier keys as keys (macro steps), shown the Mac way; left and right look the same.
+    static let modifierSymbols: [UInt16: String] = [
+        0x37: "⌘", 0x36: "⌘", 0x38: "⇧", 0x3C: "⇧", 0x3A: "⌥", 0x3D: "⌥", 0x3B: "⌃", 0x3E: "⌃", 0x3F: "fn",
+    ]
+
+    /// The key on its own, with left and right modifiers told apart ("Left ⌘ Command", "C").
+    var keyName: String {
+        let modifierNames: [UInt16: String] = [
+            0x37: "Left ⌘ Command", 0x36: "Right ⌘ Command", 0x38: "Left ⇧ Shift", 0x3C: "Right ⇧ Shift",
+            0x3A: "Left ⌥ Option", 0x3D: "Right ⌥ Option", 0x3B: "Left ⌃ Control", 0x3E: "Right ⌃ Control", 0x3F: "fn",
+        ]
+        return modifierNames[keyCode] ?? KeyCatalog.name(forMacKeyCode: keyCode)
+    }
 }
 
 /// A shortcut handled by the app's event tap: when `trigger` is pressed, `output` is sent instead,
@@ -157,7 +171,11 @@ struct ComboBinding: Codable, Hashable, Identifiable {
         output = try c.decode(KeyChord.self, forKey: .output)
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
-        macro = try c.decodeIfPresent([MacroItem].self, forKey: .macro) ?? []
+        // Press steps from an earlier version become the key events they stand for.
+        macro = (try c.decodeIfPresent([MacroItem].self, forKey: .macro) ?? []).flatMap { item -> [MacroItem] in
+            guard case .press(let chord) = item.step else { return [item] }
+            return MacroStep.events(for: chord).map { MacroItem(step: $0) }
+        }
         stepDelay = try c.decodeIfPresent(Int.self, forKey: .stepDelay) ?? 0
         repeatsWhileHeld = try c.decodeIfPresent(Bool.self, forKey: .repeatsWhileHeld) ?? false
     }
