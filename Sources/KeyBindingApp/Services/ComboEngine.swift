@@ -1,0 +1,114 @@
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+/// Turns one key combination into another with a CGEventTap.
+/// Needs the Accessibility permission (System Settings > Privacy & Security > Accessibility).
+final class ComboEngine {
+    /// Marks events we post ourselves so the tap lets them through.
+    private static let marker: Int64 = 0x4B42_4150 // "KBAP"
+
+    var bindings: [ComboBinding] = []
+    /// Temporarily lets every key through, e.g. while the user records a new shortcut.
+    var isPaused = false
+
+    private var tap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    private var swallowedKeyUps = Set<UInt16>()
+    private let source = CGEventSource(stateID: .privateState)
+
+    var isRunning: Bool { tap != nil }
+
+    @discardableResult
+    func start() -> Bool {
+        guard tap == nil else { return true }
+        let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: CGEventMask(mask),
+            callback: { _, type, event, context in
+                guard let context else { return Unmanaged.passUnretained(event) }
+                let engine = Unmanaged<ComboEngine>.fromOpaque(context).takeUnretainedValue()
+                return engine.handle(type: type, event: event)
+            },
+            userInfo: context
+        ) else {
+            return false
+        }
+        self.tap = tap
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        runLoopSource = source
+        CGEvent.tapEnable(tap: tap, enable: true)
+        return true
+    }
+
+    func stop() {
+        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+        if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
+        if let tap { CFMachPortInvalidate(tap) }
+        tap = nil
+        runLoopSource = nil
+        swallowedKeyUps.removeAll()
+    }
+
+    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        switch type {
+        case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            // macOS turns slow taps off; turn it back on.
+            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            return Unmanaged.passUnretained(event)
+        case .keyDown, .keyUp:
+            break
+        default:
+            return Unmanaged.passUnretained(event)
+        }
+
+        if isPaused || event.getIntegerValueField(.eventSourceUserData) == Self.marker {
+            return Unmanaged.passUnretained(event)
+        }
+
+        let keyCode = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
+
+        if type == .keyUp {
+            return swallowedKeyUps.remove(keyCode) != nil ? nil : Unmanaged.passUnretained(event)
+        }
+
+        let modifiers = ModifierSet(cgFlags: event.flags).subtracting(.function)
+        guard let binding = bindings.first(where: {
+            $0.enabled && $0.trigger.keyCode == keyCode && $0.trigger.modifiers.subtracting(.function) == modifiers
+        }) else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        // Send a full press of the output on every key-down (auto-repeat included),
+        // and swallow the trigger's key-up, so no key or modifier ever gets stuck.
+        swallowedKeyUps.insert(keyCode)
+        post(binding.output)
+        return nil
+    }
+
+    private func post(_ chord: KeyChord) {
+        let flags = chord.modifiers.cgFlags
+        for isDown in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: chord.keyCode, keyDown: isDown) else { continue }
+            event.flags = flags
+            event.setIntegerValueField(.eventSourceUserData, value: Self.marker)
+            // Posting at the HID level lets system shortcuts (screenshots, Mission Control) react too.
+            event.post(tap: .cghidEventTap)
+        }
+    }
+
+    // MARK: - Permission
+
+    static var hasAccess: Bool { AXIsProcessTrusted() }
+
+    /// Shows the system prompt that leads to System Settings > Accessibility.
+    static func requestAccess() {
+        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+    }
+}
