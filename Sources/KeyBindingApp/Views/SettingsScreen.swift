@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 
 struct SettingsScreen: View {
     @EnvironmentObject private var state: AppState
-    @State private var presetDeviceID: String?
     @State private var confirmReset = false
     @State private var message: String?
 
@@ -46,20 +45,23 @@ struct SettingsScreen: View {
             }
 
             Section("Presets") {
-                Picker("Keyboard for remaps", selection: $presetDeviceID) {
-                    Text("All keyboards").tag(String?.none)
-                    DevicePickerItems(devices: state.devices)
-                }
                 ForEach(Preset.allCases) { preset in
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(preset.title)
                             Text(preset.details).font(.callout).foregroundStyle(.secondary)
+                            if preset.isPerKeyboard {
+                                Text(state.defaultKeyboard.map { "Add changes \($0.name) only; the arrow picks another keyboard." }
+                                     ?? "No external keyboard is connected: Add changes all keyboards, the MacBook's too.")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
-                        Button("Add") {
-                            preset.apply(to: state, device: state.devices.first { $0.id == presetDeviceID })
-                            message = "Added preset “\(preset.title)”."
+                        if preset.isPerKeyboard {
+                            keyboardMenu(for: preset)
+                        } else {
+                            Button("Add") { add(preset, device: nil) }
                         }
                     }
                 }
@@ -93,12 +95,30 @@ struct SettingsScreen: View {
         } message: {
             Text("The keyboard immediately goes back to normal.")
         }
-        .onAppear {
-            // Most likely the user wants presets for the external (Windows) keyboard.
-            if presetDeviceID == nil {
-                presetDeviceID = state.defaultKeyboard?.id
+    }
+
+    /// Add for the external keyboard (or every keyboard if none is connected); the arrow picks another one.
+    /// Only keyboards are offered, never mice.
+    private func keyboardMenu(for preset: Preset) -> some View {
+        let keyboards = state.devices.filter { !$0.isMouse }
+        let target = state.defaultKeyboard
+        return Menu("Add") {
+            ForEach(keyboards) { device in
+                Button("For \(device.name)") { add(preset, device: device) }
             }
+            Divider()
+            Button("For All Keyboards") { add(preset, device: nil) }
+        } primaryAction: {
+            add(preset, device: target)
         }
+        .menuStyle(.borderedButton)
+        .fixedSize()
+    }
+
+    private func add(_ preset: Preset, device: DeviceRef?) {
+        preset.apply(to: state, device: device)
+        let target = preset.isPerKeyboard ? " for " + (device?.name ?? "all keyboards") : ""
+        message = "Added preset “\(preset.title)”\(target)."
     }
 
     private func exportConfig() {

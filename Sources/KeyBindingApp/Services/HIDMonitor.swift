@@ -132,14 +132,24 @@ final class HIDMonitor {
         }
         var name = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? ""
         if name.isEmpty { name = String(format: "Keyboard %04X:%04X", vendor, product) }
-        let isMouse = usagePairs(device).contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Mouse])
-        return DeviceRef(vendorID: vendor, productID: product, name: name, isMouse: isMouse)
+        return DeviceRef(vendorID: vendor, productID: product, name: name, isMouse: !isFullKeyboard(device))
     }
 
     /// The (page, usage) pairs a device declares, e.g. 1/6 keyboard, 1/2 mouse, 12/1 media buttons.
     private static func usagePairs(_ device: IOHIDDevice) -> Set<[Int]> {
         let pairs = IOHIDDeviceGetProperty(device, kIOHIDDeviceUsagePairsKey as CFString) as? [[String: Int]] ?? []
         return Set(pairs.map { [$0[kIOHIDDeviceUsagePageKey] ?? 0, $0[kIOHIDDeviceUsageKey] ?? 0] })
+    }
+
+    /// A real keyboard, not a mouse or other device whose buttons send keys. Keyboards declare the keyboard
+    /// LEDs (Caps Lock, Num Lock…) even when they have no lights; mice with programmable buttons (G700s,
+    /// M720) declare a keyboard interface but no LEDs. The elements are only visible with Input Monitoring
+    /// access; without it, an interface that also declares a mouse counts as a mouse.
+    private static func isFullKeyboard(_ device: IOHIDDevice) -> Bool {
+        if usagePairs(device).contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Mouse]) { return false }
+        let elements = IOHIDDeviceCopyMatchingElements(device, nil, IOOptionBits(kIOHIDOptionsTypeNone)) as? [IOHIDElement] ?? []
+        guard !elements.isEmpty else { return true }
+        return elements.contains { IOHIDElementGetUsagePage($0) == kHIDPage_LEDs }
     }
 
     private static func isBuiltInKeyboard(_ device: IOHIDDevice) -> Bool {

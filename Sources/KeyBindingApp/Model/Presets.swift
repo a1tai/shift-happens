@@ -19,7 +19,7 @@ enum Preset: String, CaseIterable, Identifiable {
     var details: String {
         switch self {
         case .swapWinAlt:
-            return "Alt becomes ⌘ Command and Win becomes ⌥ Option, matching the Mac key layout. Only for the selected keyboard."
+            return "Alt becomes ⌘ Command and Win becomes ⌥ Option, matching the Mac key layout."
         case .printScreen:
             return "PrtSc sends ⌘⇧4, ⇧PrtSc sends ⌘⇧3 (whole screen)."
         case .homeEnd:
@@ -30,6 +30,9 @@ enum Preset: String, CaseIterable, Identifiable {
             return "Mouse button 4 sends ⌘[ (back) and button 5 sends ⌘] (forward), which Safari and Finder understand."
         }
     }
+
+    /// Only this preset makes remaps, which belong to one keyboard; the others make combos, which work everywhere.
+    var isPerKeyboard: Bool { self == .swapWinAlt }
 
     /// Applies the preset. Remaps go to `device` (nil = every keyboard).
     func apply(to state: AppState, device: DeviceRef?) {
