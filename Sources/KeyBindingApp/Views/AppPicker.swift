@@ -15,11 +15,13 @@ struct AppPickerField: View {
             } else {
                 Text("No app chosen").foregroundStyle(.secondary)
             }
+            Spacer(minLength: 8)
             Button(app == nil ? "Choose App…" : "Change…", action: choose)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.07)))
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
             .strokeBorder(isTargeted ? Color.accentColor : Color.primary.opacity(0.15), lineWidth: isTargeted ? 2 : 1))
         .onDrop(of: [UTType.fileURL], isTargeted: $isTargeted) { providers in
             guard let provider = providers.first else { return false }

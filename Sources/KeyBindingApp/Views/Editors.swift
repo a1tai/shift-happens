@@ -122,61 +122,63 @@ struct ComboEditor: View {
         }
     }
 
+    /// Every row has a label in one column, and every control starts at the same edge and takes the same width.
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             Text(isNew ? "New Combo" : "Combo").font(.title2.bold())
-            if kind == .shortcut {
-                Text("When you press the first combination, the app sends the second one instead. For example Insert → ⌘V or ⌃C → ⌘C.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
 
-            // Compact rows instead of form groups, so the macro steps get the room.
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
                 GridRow {
                     Text("When pressed").gridColumnAlignment(.trailing)
                     ChordEditor(chord: $draft.trigger, allowsMouseButtons: true)
                 }
+                caption("Click the field and press the keys, or an extra mouse button.")
+
+                Divider().gridCellUnsizedAxes(.horizontal).padding(.vertical, 4)
+
                 GridRow {
-                    Text("Send")
-                    HStack {
-                        Picker("Send", selection: $kind) {
-                            Text("Shortcut").tag(OutputKind.shortcut)
-                            Text("Macro").tag(OutputKind.macro)
-                            Text("Open App").tag(OutputKind.app)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
-                        Spacer()
+                    Text("Action")
+                    Picker("Action", selection: $kind) {
+                        Text("Shortcut").tag(OutputKind.shortcut)
+                        Text("Macro").tag(OutputKind.macro)
+                        Text("Open App").tag(OutputKind.app)
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
                 }
-                if kind == .shortcut {
+                switch kind {
+                case .shortcut:
                     GridRow {
-                        Color.clear.frame(width: 1, height: 1)
+                        Text("Send")
                         ChordEditor(chord: $draft.output)
                     }
-                }
-                if kind == .app {
+                    caption("Sent instead of the trigger. For example Insert → ⌘V.")
+                case .macro:
+                    caption("Plays the steps below, in order.")
+                case .app:
+                    GridRow {
+                        Text("Application")
+                        AppPickerField(app: $draft.app)
+                    }
                     GridRow {
                         Color.clear.frame(width: 1, height: 1)
-                        VStack(alignment: .leading, spacing: 8) {
-                            AppPickerField(app: $draft.app)
-                            Toggle("If it is already in front, hide it", isOn: hidesBinding)
-                                .disabled(draft.app == nil)
-                            Text("Opens the app, or brings it to the front if it is running.")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
+                        Toggle("If it is already in front, hide it", isOn: hidesBinding)
+                            .disabled(draft.app == nil)
                     }
+                    caption("Opens the app, or brings it to the front if it is running.")
                 }
+
+                Divider().gridCellUnsizedAxes(.horizontal).padding(.vertical, 4)
+
                 GridRow {
                     Text("Note")
-                    HStack(spacing: 14) {
-                        TextField("Note", text: $draft.note, prompt: Text("for example “Paste”"))
-                            .labelsHidden()
-                        Toggle("Enabled", isOn: $draft.enabled)
-                    }
+                    TextField("Note", text: $draft.note, prompt: Text("Optional, for example “Paste”"))
+                        .labelsHidden()
+                }
+                GridRow {
+                    Color.clear.frame(width: 1, height: 1)
+                    Toggle("Enabled", isOn: $draft.enabled)
                 }
             }
 
@@ -219,6 +221,18 @@ struct ComboEditor: View {
 
     }
 
+    /// A hint under the control it explains, in the control column.
+    private func caption(_ text: String) -> some View {
+        GridRow {
+            Color.clear.frame(width: 1, height: 1)
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, -4)
+        }
+    }
+
     private var hidesBinding: Binding<Bool> {
         Binding(get: { draft.app?.hidesIfFrontmost ?? false },
                 set: { draft.app?.hidesIfFrontmost = $0 })
@@ -238,9 +252,36 @@ struct ChordEditor: View {
 
     private var isRecording: Bool { state.activeRecorder == recorderID }
 
+    /// The key or mouse button alone; the modifiers are the toggles in front of it.
+    private var keyText: String {
+        if let button = chord.mouseButton { return KeyChord.mouseName(button) }
+        return KeyChord(keyCode: chord.keyCode, modifiers: []).display
+    }
+
+    /// Reads left to right like the shortcut itself: ⌃ ⌥ ⇧ ⌘ + key.
     var body: some View {
-        HStack(spacing: compact ? 8 : 12) {
-            KeyFieldShell(text: chord.display, isRecording: isRecording, minWidth: compact ? 120 : 160,
+        HStack(spacing: compact ? 6 : 8) {
+            HStack(spacing: 3) {
+                ForEach(ModifierToggle.all) { item in
+                    let on = chord.modifiers.contains(item.flag)
+                    Button {
+                        if on { chord.modifiers.remove(item.flag) } else { chord.modifiers.insert(item.flag) }
+                    } label: {
+                        Text(item.symbol)
+                            .font(.system(size: compact ? 12 : 13, weight: .semibold))
+                            .frame(width: compact ? 22 : 26, height: compact ? 22 : 26)
+                            .foregroundStyle(on ? Color.white : Color.primary)
+                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(on ? Color.accentColor : Color.primary.opacity(0.07)))
+                            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(on ? Color.clear : Color.primary.opacity(0.15)))
+                    }
+                    .buttonStyle(.plain)
+                    .help(item.name)
+                }
+            }
+            Text("+").foregroundStyle(.secondary)
+            KeyFieldShell(text: keyText, isRecording: isRecording, minWidth: compact ? 120 : 160, fillsWidth: !compact,
                           onClick: { isRecording ? stopRecording() : startRecording() }) {
                 KeyMenuItems(keys: allowsModifierKeys ? KeyCatalog.chordKeysWithModifiers : KeyCatalog.chordKeys) { key in
                     if let code = key.macKeyCode { chord = KeyChord(keyCode: code, modifiers: chord.modifiers) }
@@ -257,24 +298,6 @@ struct ChordEditor: View {
                   ? (allowsMouseButtons ? "Press the shortcut, or click a mouse's middle, back or forward button. Esc cancels."
                                         : "Press the shortcut. Esc cancels.")
                   : "Click to record a shortcut, or pick a key with the arrow")
-            if !compact { Spacer(minLength: 8) }
-            HStack(spacing: 3) {
-                ForEach(ModifierToggle.all) { item in
-                    let on = chord.modifiers.contains(item.flag)
-                    Button {
-                        if on { chord.modifiers.remove(item.flag) } else { chord.modifiers.insert(item.flag) }
-                    } label: {
-                        Text(item.symbol)
-                            .font(.system(size: compact ? 12 : 14, weight: .semibold))
-                            .frame(width: compact ? 22 : 26, height: compact ? 20 : 24)
-                            .foregroundStyle(on ? Color.white : Color.primary)
-                            .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(on ? Color.accentColor : Color.primary.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
-                    .help(item.name)
-                }
-            }
         }
         .onDisappear(perform: stopRecording)
     }
@@ -387,6 +410,8 @@ struct KeyFieldShell<MenuContent: View>: View {
     let text: String
     let isRecording: Bool
     var minWidth: CGFloat = 160
+    /// Takes all the width it is given instead of just what the text needs.
+    var fillsWidth = false
     let onClick: () -> Void
     @ViewBuilder let menu: () -> MenuContent
 
@@ -402,7 +427,7 @@ struct KeyFieldShell<MenuContent: View>: View {
                         .foregroundStyle(isRecording ? Color.accentColor : .primary)
                         .lineLimit(1)
                 }
-                .frame(minWidth: minWidth - 28, alignment: .center)
+                .frame(minWidth: minWidth - 28, maxWidth: fillsWidth ? .infinity : nil, alignment: .center)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .contentShape(Rectangle())
@@ -420,7 +445,7 @@ struct KeyFieldShell<MenuContent: View>: View {
         .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.07)))
         .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
             .strokeBorder(isRecording ? Color.accentColor : Color.primary.opacity(0.15), lineWidth: isRecording ? 2 : 1))
-        .fixedSize()
+        .fixedSize(horizontal: !fillsWidth, vertical: true)
     }
 }
 
