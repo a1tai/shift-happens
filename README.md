@@ -47,9 +47,9 @@ The release build is not notarized, so macOS warns on first open. Open it anyway
 or in System Settings → Privacy & Security → **Open Anyway**, or with
 `xattr -dr com.apple.quarantine "/Applications/Shift Happens.app"`.
 
-The release build is signed ad hoc, so after installing a new version macOS may ask for Input Monitoring and
-Accessibility again: remove the old Shift Happens entries in System Settings → Privacy & Security and allow
-the new one.
+Releases are signed with the same (self-signed) certificate every time, so the Input Monitoring and
+Accessibility permissions stay when you update. Coming from 1.0.0 or 1.0.1, allow them once more: remove the
+old Shift Happens entries in System Settings → Privacy & Security and allow the new one.
 
 Requires macOS 13 or later.
 

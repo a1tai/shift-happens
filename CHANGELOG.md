@@ -2,6 +2,9 @@
 
 ## 1.0.2 — 2026-10-22
 
+- Releases are signed with the same certificate every time, so macOS keeps the Input Monitoring and
+  Accessibility permissions when you update. Coming from 1.0.0 or 1.0.1, allow them once more; after that
+  they stay.
 - No more code for moving settings over from the pre-release builds; the old name is gone everywhere.
 
 ## 1.0.1 — 2026-10-22
