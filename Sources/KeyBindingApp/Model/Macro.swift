@@ -59,6 +59,8 @@ struct MacroRecorder {
     /// A modifier pressed with no other key yet; released alone, it is recorded as a press of its own.
     private var loneModifier: UInt32?
     private var lastEvent: Date?
+    /// Keys down right now: a second "down" for one of them is a duplicate report, not a new press.
+    private var heldKeys: Set<UInt16> = []
 
     init(recordsDelays: Bool) { self.recordsDelays = recordsDelays }
 
@@ -86,6 +88,11 @@ struct MacroRecorder {
         }
 
         guard let code = KeyCatalog.key(for: usage)?.macKeyCode else { return }
+        if isDown {
+            guard heldKeys.insert(code).inserted else { return }
+        } else {
+            guard heldKeys.remove(code) != nil else { return }
+        }
         defer { lastEvent = time }
         loneModifier = nil
         if isDown {
@@ -108,5 +115,22 @@ struct MacroRecorder {
             if ms >= Self.minimumDelay { steps.append(.delay(ms)) }
         }
         steps.append(step)
+    }
+}
+
+extension Array where Element == MacroItem {
+    /// Cleans up a recording: drops delays shorter than `minimumDelay` ms, then turns a key down followed
+    /// directly by the same key's up into one press.
+    func simplified(minimumDelay: Int) -> [MacroItem] {
+        var result: [MacroItem] = []
+        for item in self {
+            if case .delay(let ms) = item.step, ms < minimumDelay { continue }
+            if case .keyUp(let up) = item.step, case .keyDown(let down)? = result.last?.step, down.keyCode == up.keyCode {
+                result[result.count - 1].step = .press(down)
+                continue
+            }
+            result.append(item)
+        }
+        return result
     }
 }

@@ -210,6 +210,15 @@ enum DebugSnapshot {
         lone.handle(hid(0xE1), isDown: true, at: at(0)); lone.handle(hid(0xE1), isDown: false, at: at(50))
         check("lone modifier is a press", lone.steps == [.press(KeyChord(keyCode: 0x38, modifiers: []))], "\(lone.steps)")
 
+        var twice = MacroRecorder(recordsDelays: true)
+        twice.handle(hid(0x0A), isDown: true, at: at(0)); twice.handle(hid(0x0A), isDown: true, at: at(70))
+        twice.handle(hid(0x0A), isDown: false, at: at(100)); twice.handle(hid(0x0A), isDown: false, at: at(101))
+        check("a key reported twice is one press", twice.steps == [.press(KeyChord(keyCode: 0x05, modifiers: []))], "\(twice.steps)")
+        let messy = [MacroStep.keyDown(KeyChord(keyCode: 5, modifiers: [])), .delay(10), .keyUp(KeyChord(keyCode: 5, modifiers: [])),
+                     .delay(250), .press(KeyChord(keyCode: 9, modifiers: .command))].map { MacroItem(step: $0) }
+        check("simplify", messy.simplified(minimumDelay: 30).map(\.step) == [.press(KeyChord(keyCode: 5, modifiers: [])), .delay(250),
+                                                                         .press(KeyChord(keyCode: 9, modifiers: .command))])
+
         // Saving macros, and combos saved before macros existed.
         var macroCombo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []), output: KeyChord(keyCode: 0, modifiers: []))
         macroCombo.macro = rec.steps.map { MacroItem(step: $0) } + [MacroItem(step: .text("Hi")),

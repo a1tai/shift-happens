@@ -20,20 +20,13 @@ struct RemapEditor: View {
 
             Form {
                 LabeledContent("Key") {
-                    HStack {
-                        KeyPicker(selection: $draft.from, keys: KeyCatalog.sources)
-                        CaptureButton { event in
-                            // The key belongs to the keyboard it was pressed on; switch to "all" below if needed.
-                            draft.from = event.usage
-                            draft.device = event.device
-                        }
+                    KeyField(usage: $draft.from, keys: KeyCatalog.sources) { event in
+                        // The key belongs to the keyboard it was pressed on; switch to "all" below if needed.
+                        draft.device = event.device
                     }
                 }
                 LabeledContent("Acts as") {
-                    HStack {
-                        KeyPicker(selection: $draft.to, keys: KeyCatalog.targets)
-                        CaptureButton { draft.to = $0.usage }
-                    }
+                    KeyField(usage: $draft.to, keys: KeyCatalog.targets)
                 }
                 Picker("Keyboard", selection: deviceSelection) {
                     Text("All keyboards (including built-in)").tag(String?.none)
@@ -130,7 +123,24 @@ struct ComboEditor: View {
                         Text("Macro").tag(true)
                     }
                     .pickerStyle(.segmented)
-                    if !sendsMacro { ChordEditor(chord: $draft.output) }
+                    if sendsMacro {
+                        HStack {
+                            Text("Pause between steps")
+                            Spacer()
+                            TextField("", value: $draft.stepDelay, format: .number)
+                                .frame(width: 60)
+                                .multilineTextAlignment(.trailing)
+                            Text("ms").foregroundStyle(.secondary)
+                            Picker("", selection: $draft.repeatsWhileHeld) {
+                                Text("Run once").tag(false)
+                                Text("Repeat while held").tag(true)
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                    } else {
+                        ChordEditor(chord: $draft.output)
+                    }
                 }
                 Section {
                     TextField("Note", text: $draft.note, prompt: Text("for example “Paste”"))
@@ -143,6 +153,7 @@ struct ComboEditor: View {
 
             if sendsMacro {
                 MacroEditor(combo: $draft)
+                    .frame(maxHeight: .infinity)
             }
 
             if !state.accessibilityGranted {
@@ -171,7 +182,9 @@ struct ComboEditor: View {
             }
         }
         .padding(24)
-        .frame(width: sendsMacro ? 720 : 560)
+        // The macro editor is resizable; its step list takes the extra height.
+        .frame(minWidth: sendsMacro ? 720 : 560, idealWidth: sendsMacro ? 820 : 560, maxWidth: sendsMacro ? .infinity : 560,
+               minHeight: sendsMacro ? 560 : nil, idealHeight: sendsMacro ? 780 : nil, maxHeight: sendsMacro ? .infinity : nil)
         .onChange(of: sendsMacro) { macro in
             // Start a new macro from the shortcut that was set up so far.
             if macro && draft.macro.isEmpty { draft.macro = [MacroItem(step: .press(draft.output))] }
@@ -179,66 +192,44 @@ struct ComboEditor: View {
     }
 }
 
-/// Edits a key + modifiers, either by recording a press or by picking from lists
-/// (useful for shortcuts the system grabs before the app sees them, like ⌘Tab).
+/// Edits a key + modifiers: a key field (click to record, arrow to pick) and the ⌃⌥⇧⌘ toggles.
 struct ChordEditor: View {
     @EnvironmentObject private var state: AppState
     @Binding var chord: KeyChord
     /// Lists Shift, Control and the like as keys too (macro steps that hold a modifier).
     var allowsModifierKeys = false
+    var compact = false
     @State private var recorderID = UUID()
 
     private var isRecording: Bool { state.activeRecorder == recorderID }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                isRecording ? stopRecording() : startRecording()
-            } label: {
-                Text(isRecording ? "Press keys…" : chord.display)
-                    .font(.system(.title3, design: .rounded).weight(.semibold))
-                    .lineLimit(1)
-                    .frame(minWidth: 130)
-                    .padding(.vertical, 4)
+        HStack(spacing: compact ? 8 : 12) {
+            KeyFieldShell(text: chord.display, isRecording: isRecording, minWidth: compact ? 120 : 160,
+                          onClick: { isRecording ? stopRecording() : startRecording() }) {
+                KeyMenuItems(keys: allowsModifierKeys ? KeyCatalog.chordKeysWithModifiers : KeyCatalog.chordKeys) { key in
+                    if let code = key.macKeyCode { chord.keyCode = code }
+                }
             }
-            .buttonStyle(.bordered)
-            .tint(isRecording ? .accentColor : nil)
-            .help(isRecording ? "Press the shortcut, or click to cancel" : "Click, then press a key combination")
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 4) {
+            .help(isRecording ? "Press the shortcut. Esc cancels." : "Click to record a shortcut, or pick a key with the arrow")
+            if !compact { Spacer(minLength: 8) }
+            HStack(spacing: 3) {
                 ForEach(ModifierToggle.all) { item in
                     let on = chord.modifiers.contains(item.flag)
                     Button {
                         if on { chord.modifiers.remove(item.flag) } else { chord.modifiers.insert(item.flag) }
                     } label: {
                         Text(item.symbol)
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(width: 26, height: 24)
+                            .font(.system(size: compact ? 12 : 14, weight: .semibold))
+                            .frame(width: compact ? 22 : 26, height: compact ? 20 : 24)
                             .foregroundStyle(on ? Color.white : Color.primary)
-                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
                                 .fill(on ? Color.accentColor : Color.primary.opacity(0.08)))
                     }
                     .buttonStyle(.plain)
                     .help(item.name)
                 }
             }
-            Picker("", selection: $chord.keyCode) {
-                ForEach(KeyDef.Category.allCases, id: \.self) { category in
-                    let keys = (allowsModifierKeys ? KeyCatalog.chordKeysWithModifiers : KeyCatalog.chordKeys)
-                        .filter { $0.category == category }
-                    if !keys.isEmpty {
-                        Section(category.rawValue) {
-                            ForEach(keys) { key in
-                                Text(key.name).tag(key.macKeyCode ?? 0)
-                            }
-                        }
-                    }
-                }
-            }
-            .labelsHidden()
-            .frame(width: 140)
         }
         .onDisappear(perform: stopRecording)
     }
@@ -259,7 +250,7 @@ struct ChordEditor: View {
     }
 }
 
-private struct ModifierToggle: Identifiable {
+struct ModifierToggle: Identifiable {
     let symbol: String
     let name: String
     let flag: ModifierSet
@@ -299,58 +290,104 @@ struct DevicePickerItems: View {
     }
 }
 
-/// A menu of keys grouped by category.
-struct KeyPicker: View {
-    @Binding var selection: HIDUsage
-    let keys: [KeyDef]
-
-    var body: some View {
-        Picker("", selection: $selection) {
-            if KeyCatalog.key(for: selection) == nil {
-                Text(KeyCatalog.name(for: selection)).tag(selection)
-            }
-            ForEach(KeyDef.Category.allCases, id: \.self) { category in
-                let group = keys.filter { $0.category == category }
-                if !group.isEmpty {
-                    Section(category.rawValue) {
-                        ForEach(group) { key in
-                            Text(key.name).tag(key.hid)
-                        }
-                    }
-                }
-            }
-        }
-        .labelsHidden()
-        .fixedSize()
-    }
-}
-
-/// "Press a key" button: the next physical key press (from any keyboard) is passed to `onCapture`.
-struct CaptureButton: View {
+/// One key, chosen by pressing it (click the field) or from the categorized menu (the arrow).
+/// Esc cancels recording; Esc itself can be picked from the menu.
+struct KeyField: View {
     @EnvironmentObject private var state: AppState
-    let onCapture: (HIDKeyEvent) -> Void
+    @Binding var usage: HIDUsage
+    let keys: [KeyDef]
+    /// Called after a recorded press, e.g. to note which keyboard it came from.
+    var onRecord: (HIDKeyEvent) -> Void = { _ in }
     @State private var recorderID = UUID()
 
     private var isRecording: Bool { state.activeRecorder == recorderID }
 
     var body: some View {
-        Button(isRecording ? "Press a key…" : "Record") {
-            if isRecording {
+        KeyFieldShell(text: KeyCatalog.name(for: usage), isRecording: isRecording, minWidth: 200,
+                      onClick: toggleRecording) {
+            KeyMenuItems(keys: keys) { usage = $0.hid }
+        }
+        .disabled(!state.inputMonitoringGranted && !isRecording && keys.isEmpty)
+        .help(state.inputMonitoringGranted
+              ? (isRecording ? "Press a key. Esc cancels." : "Click and press a key, or pick one with the arrow")
+              : "Pick a key with the arrow. Recording a key press needs Input Monitoring access.")
+        .onDisappear { state.stopRecording(recorderID) }
+    }
+
+    private func toggleRecording() {
+        if isRecording {
+            state.stopRecording(recorderID)
+        } else if state.inputMonitoringGranted {
+            // Starting this recorder stops any other one.
+            state.startRecording(recorderID)
+            state.captureHandler = { event in
+                usage = event.usage
+                onRecord(event)
                 state.stopRecording(recorderID)
-            } else {
-                // Starting this recorder stops any other one.
-                state.startRecording(recorderID)
-                state.captureHandler = { event in
-                    onCapture(event)
-                    state.stopRecording(recorderID)
+            }
+        }
+    }
+}
+
+/// The look shared by key fields: a rounded field showing the key that records on click,
+/// with an arrow at its trailing edge for the key menu.
+struct KeyFieldShell<MenuContent: View>: View {
+    let text: String
+    let isRecording: Bool
+    var minWidth: CGFloat = 160
+    let onClick: () -> Void
+    @ViewBuilder let menu: () -> MenuContent
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: onClick) {
+                HStack(spacing: 6) {
+                    if isRecording {
+                        Circle().fill(Color.red).frame(width: 7, height: 7)
+                    }
+                    Text(isRecording ? "Press keys…" : text)
+                        .font(.system(.body, design: .rounded).weight(.semibold))
+                        .foregroundStyle(isRecording ? Color.accentColor : .primary)
+                        .lineLimit(1)
+                }
+                .frame(minWidth: minWidth - 28, alignment: .center)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Divider().frame(height: 16)
+            Menu(content: menu) {
+                Image(systemName: "chevron.down")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 28)
+            .help("Pick a key from the list")
+        }
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.07)))
+        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .strokeBorder(isRecording ? Color.accentColor : Color.primary.opacity(0.15), lineWidth: isRecording ? 2 : 1))
+        .fixedSize()
+    }
+}
+
+/// Menu entries for every key, grouped by category.
+struct KeyMenuItems: View {
+    let keys: [KeyDef]
+    let pick: (KeyDef) -> Void
+
+    var body: some View {
+        ForEach(KeyDef.Category.allCases, id: \.self) { category in
+            let group = keys.filter { $0.category == category }
+            if !group.isEmpty {
+                Menu(category.rawValue) {
+                    ForEach(group) { key in
+                        Button(key.name) { pick(key) }
+                    }
                 }
             }
         }
-        .buttonStyle(.bordered)
-        .tint(isRecording ? .accentColor : nil)
-        .disabled(!state.inputMonitoringGranted)
-        .help(state.inputMonitoringGranted ? "Click, then press a key on the keyboard" : "Needs Input Monitoring access")
-        .onDisappear { state.stopRecording(recorderID) }
     }
 }
 

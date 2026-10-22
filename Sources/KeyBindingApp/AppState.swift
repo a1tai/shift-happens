@@ -415,6 +415,10 @@ final class AppState: NSObject, ObservableObject {
         if let handler = chordCaptureHandler {
             // The raw key is what the keyboard sent; macOS (and the combo engine) sees it after the remaps.
             if let chord = chordTracker.handle(remapped(hidEvent.usage, from: hidEvent.device), isDown: hidEvent.isDown) {
+                if chord == KeyChord(keyCode: 0x35, modifiers: []), let id = activeRecorder {
+                    stopRecording(id) // Esc alone cancels; Esc can still be picked from the key menu.
+                    return
+                }
                 chordCaptureHandler = nil
                 handler(chord)
             }
@@ -430,7 +434,11 @@ final class AppState: NSObject, ObservableObject {
         }
         guard hidEvent.isDown else { return }
 
-        // A "press a key" button gets exactly this one press, nothing is kept.
+        // A "press a key" button gets exactly this one press, nothing is kept. Esc cancels it.
+        if hidEvent.usage == HIDUsage(page: HIDPage.keyboard, usage: 0x29), captureHandler != nil, let id = activeRecorder {
+            stopRecording(id)
+            return
+        }
         if let handler = captureHandler {
             captureHandler = nil
             handler(hidEvent)

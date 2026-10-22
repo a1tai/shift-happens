@@ -21,6 +21,9 @@ final class HIDMonitor {
     var onDevicesChanged: (([DeviceRef]) -> Void)?
 
     private(set) var devices: [DeviceRef] = []
+    /// Last state of each key per device. Some keyboards (the MacBook's own) show up as two HID devices
+    /// and report every press twice; a press of a key that is already down is dropped.
+    private var keyStates: [String: Bool] = [:]
     private var manager: IOHIDManager?
 
     var isRunning: Bool { manager != nil }
@@ -98,6 +101,9 @@ final class HIDMonitor {
         guard raw == 0 || raw == 1 else { return }
         let pressed = raw == 1
         let device = Self.deviceRef(IOHIDElementGetDevice(element))
+        let stateKey = "\(device.id)/\(page)/\(usage)"
+        guard keyStates[stateKey] != pressed else { return }
+        keyStates[stateKey] = pressed
         onKey?(HIDKeyEvent(usage: HIDUsage(page: page, usage: usage), isDown: pressed, device: device, time: Date()))
     }
 
