@@ -45,7 +45,7 @@ struct SettingsScreen: View {
                 Text("After restart")
             }
 
-            Section("Presets for Windows keyboards") {
+            Section("Presets") {
                 Picker("Keyboard for remaps", selection: $presetDeviceID) {
                     Text("All keyboards").tag(String?.none)
                     DevicePickerItems(devices: state.devices)
@@ -84,7 +84,7 @@ struct SettingsScreen: View {
             }
 
             Section {
-                Button("Delete all bindings…", role: .destructive) { confirmReset = true }
+                Button("Delete All Remaps and Combos…", role: .destructive) { confirmReset = true }
             }
         }
         .formStyle(.grouped)
@@ -119,7 +119,8 @@ struct SettingsScreen: View {
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let imported = try JSONDecoder().decode(AppConfig.self, from: Data(contentsOf: url))
+            // Imported files are cut to sane limits (list sizes, delays, text) before use.
+            let imported = try JSONDecoder().decode(AppConfig.self, from: Data(contentsOf: url)).sanitized()
             var config = state.config
             config.remaps = imported.remaps
             config.combos = imported.combos

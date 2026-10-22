@@ -24,13 +24,18 @@ struct KeyBindingApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let showWindowNotification = Notification.Name("com.keybindingapp.showWindow")
+    #if DEBUG
     /// Same as the menu item; lets the Emoji & Symbols action be checked without clicking the menu.
+    /// Debug builds only: in a release, other programs must not be able to make the app send keys.
     static let showEmojiNotification = Notification.Name("com.keybindingapp.showEmojiAndSymbols")
+    #endif
 
     /// NSApp.delegate is SwiftUI's wrapper, so views reach this object through here.
     static private(set) weak var shared: AppDelegate?
 
     private var window: NSWindow?
+    /// Termination signals skip applicationWillTerminate; these handlers clean up the same way first.
+    private var signalSources: [DispatchSourceSignal] = []
     private let startedInBackground = CommandLine.arguments.contains(LaunchAgent.backgroundArgument)
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -50,13 +55,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        for sig in [SIGTERM, SIGINT, SIGHUP] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler { NSApp.terminate(nil) }
+            source.resume()
+            signalSources.append(source)
+        }
         DebugSnapshot.runSelfTestIfRequested()
         Self.shared = self
+        #if DEBUG
         DistributedNotificationCenter.default().addObserver(
             forName: Self.showEmojiNotification, object: nil, queue: .main
         ) { _ in
             Task { @MainActor in AppState.shared.showEmojiAndSymbols() }
         }
+        #endif
         DistributedNotificationCenter.default().addObserver(
             forName: Self.showWindowNotification, object: nil, queue: .main
         ) { _ in

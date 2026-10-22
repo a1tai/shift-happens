@@ -3,7 +3,6 @@
 // Copyright (c) 2025 abaskalov. See THIRD_PARTY_NOTICES.md.
 import AppKit
 import Carbon
-import IOKit.hid
 import os
 
 /// Remembers the keys of the word being typed. A lone press of the trigger key then
@@ -12,7 +11,7 @@ import os
 /// - or just switches the layout if nothing is selected either.
 /// Pressing the trigger again converts back. Needs the Accessibility permission.
 final class LayoutFixer {
-    /// Diagnostics only: whether the tap runs and what the trigger does. Never which keys were typed.
+    /// Only whether the tap runs. Nothing about keys or text is ever logged.
     private static let log = Logger(subsystem: "com.keybindingapp.KeyBindingApp", category: "LayoutFixer")
 
     var trigger: LayoutTrigger = .bothOptions {
@@ -38,8 +37,6 @@ final class LayoutFixer {
     private var triggerDown = false
     private var triggerAlone = false
     private var lastCapsLockState = false
-    /// Diagnostics: how many key presses the tap has seen (no key contents).
-    private var keyDownCount = 0
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -79,7 +76,7 @@ final class LayoutFixer {
             Self.log.error("Event tap could not be created (no Accessibility access?)")
             return false
         }
-        Self.log.notice("Event tap started, trigger \(self.trigger.rawValue, privacy: .public), AX trusted \(AXIsProcessTrusted(), privacy: .public), input monitoring \(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent).rawValue, privacy: .public)")
+        Self.log.notice("Event tap started")
         self.tap = tap
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
@@ -131,7 +128,6 @@ final class LayoutFixer {
         }
 
         if isPaused() {
-            if type == .flagsChanged { Self.log.notice("Paused: ignoring modifier change") }
             clearBuffer()
             triggerAlone = false
             return Unmanaged.passUnretained(event)
@@ -141,17 +137,6 @@ final class LayoutFixer {
             // Media keys arrive as NX_SYSDEFINED: Option+Volume Up is not a lone Option press.
             if triggerDown { triggerAlone = false }
             return Unmanaged.passUnretained(event)
-        }
-
-        switch type {
-        case .flagsChanged:
-            // Modifier keys only (fn, ⇧, ⌘…): which one changed and the flags, to see what the trigger key sends.
-            Self.log.notice("Modifier change: key code \(event.getIntegerValueField(.keyboardEventKeycode), privacy: .public), flags 0x\(String(event.flags.rawValue, radix: 16), privacy: .public)")
-        case .keyDown:
-            keyDownCount += 1
-            if keyDownCount % 5 == 1 { Self.log.notice("Key presses seen: \(self.keyDownCount, privacy: .public)") }
-        default:
-            break
         }
 
         switch type {
@@ -203,7 +188,6 @@ final class LayoutFixer {
     /// other triggers; Shift, ⌘, ⌃, ⌥ or any key pressed meanwhile make it a shortcut instead.
     func handleFnFromHID(isDown: Bool) {
         guard trigger == .fn, tap != nil || fixHandler != nil, !isPaused() else { return }
-        Self.log.notice("fn \(isDown ? "down" : "up", privacy: .public) (keyboard)")
         if isDown {
             let flags = CGEventSource.flagsState(.combinedSessionState)
             triggerDown = true
@@ -234,7 +218,6 @@ final class LayoutFixer {
 
         let pressed = isTriggerPressed(flags)
         if pressed != triggerDown {
-            Self.log.notice("Trigger \(pressed ? "down" : "up", privacy: .public), alone: \(self.triggerAlone, privacy: .public), flags 0x\(String(flags.rawValue, radix: 16), privacy: .public)")
         }
         // Shift/⌘/⌃ with the trigger make it a shortcut. Caps Lock is left out: it stays set while on.
         let chord = !flags.intersection([.maskShift, .maskCommand, .maskControl]).isEmpty
@@ -279,22 +262,18 @@ final class LayoutFixer {
 
     private func fire() {
         let (word, trailingSpaces) = lastWord()
-        Self.log.notice("Fire: word of \(word.count, privacy: .public) keys, current layout \(self.sources.currentID() ?? "?", privacy: .public)")
         if let fixHandler {
             fixHandler(word, trailingSpaces)
             return
         }
         // Leave the tap callback quickly; the work below talks to other apps.
         DispatchQueue.main.async { [self] in
-            let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?"
             // A selection wins over the word typed before it.
             if let text = Accessibility.selectedText() {
-                Self.log.notice("Selection read via Accessibility in \(app, privacy: .public): \(text.count, privacy: .public) characters")
                 convertSelection(text)
             } else if !word.isEmpty {
                 fixWord(word, trailingSpaces: trailingSpaces)
             } else {
-                Self.log.notice("No selection via Accessibility in \(app, privacy: .public); trying the app's Copy")
                 fixSelectionViaCopy()
             }
         }
@@ -328,7 +307,6 @@ final class LayoutFixer {
         let changeCount = pasteboard.changeCount
         let saved = savePasteboard()
         guard Accessibility.performCopy() else {
-            Self.log.notice("Nothing to fix (no enabled Copy)")
             nothingToFix()
             return
         }
@@ -336,12 +314,10 @@ final class LayoutFixer {
             // Copy in Finder copies files; pasting their converted names would duplicate them.
             let copiedFiles = pasteboard.string(forType: .fileURL) != nil
             guard let text, !text.isEmpty, !copiedFiles else {
-                Self.log.notice("Nothing to fix (Copy gave no text)")
                 if pasteboard.changeCount != changeCount { restorePasteboard(saved, afterCharCount: 0) }
                 nothingToFix()
                 return
             }
-            Self.log.notice("Selection read via Copy: \(text.count, privacy: .public) characters")
             convertSelection(text, savedClipboard: saved)
         }
     }
@@ -365,10 +341,8 @@ final class LayoutFixer {
             to = sources.nextID(after: current) ?? ids.first { $0 != current }!
         }
         guard let converted = sources.convert(text, from: from, to: to), converted != text else {
-            Self.log.notice("Selection unchanged by conversion \(from, privacy: .public) → \(to, privacy: .public)")
             return
         }
-        Self.log.notice("Pasting converted selection \(from, privacy: .public) → \(to, privacy: .public)")
         let saved = savedClipboard ?? savePasteboard()
         paste(converted)
         restorePasteboard(saved, afterCharCount: converted.count)
@@ -479,11 +453,6 @@ private enum Accessibility {
         guard let focused = focusedElement(),
               let text: String = attribute(kAXSelectedTextAttribute, of: focused), !text.isEmpty else { return nil }
         return text
-    }
-
-    static func replaceSelectedText(with text: String) -> Bool {
-        guard let focused = focusedElement() else { return false }
-        return AXUIElementSetAttributeValue(focused, kAXSelectedTextAttribute as CFString, text as CFTypeRef) == .success
     }
 
     /// Presses the frontmost app's Edit > Copy. A synthetic ⌘C is avoided on purpose: terminals such as

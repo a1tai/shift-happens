@@ -317,6 +317,28 @@ enum DebugSnapshot {
         check("saved fn remap is flagged", KeyRemap(from: KeyCatalog.fn, to: HIDUsage(page: 7, usage: 4)).usesFn)
         check("layout label", InputSourceInfo(id: "x", name: "Russian – PC", language: "ru").shortLabel == "RU")
 
+        // Imported or loaded configs are cut to sane limits.
+        var hostile = AppConfig()
+        var spam = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []), output: KeyChord(keyCode: 0, modifiers: []))
+        spam.macro = Array(repeating: MacroItem(step: .text(String(repeating: "x", count: 5000))), count: 3000)
+            + [MacroItem(step: .delay(10_000_000)), MacroItem(step: .keyDown(KeyChord(keyCode: 9999, modifiers: [])))]
+        spam.stepDelay = -5
+        hostile.combos = Array(repeating: spam, count: 600)
+            + [ComboBinding(trigger: .mouse(0), output: KeyChord(keyCode: 0, modifiers: []))]
+        let safe = hostile.sanitized()
+        check("bindings capped", safe.combos.count == AppConfig.Limits.bindings)
+        check("macro steps capped", safe.combos[0].macro.count == AppConfig.Limits.macroSteps)
+        check("text capped", safe.combos[0].macro.allSatisfy {
+            if case .text(let t) = $0.step { return t.count <= AppConfig.Limits.textLength } else { return true }
+        })
+        check("left-click trigger dropped", !hostile.sanitized().combos.contains { $0.trigger.mouseButton == 0 })
+        check("pause between steps clamped", safe.combos[0].stepDelay == 0)
+        var huge = AppConfig()
+        huge.combos = [spam]
+        huge.combos[0].macro = [MacroItem(step: .delay(10_000_000)), MacroItem(step: .keyDown(KeyChord(keyCode: 9999, modifiers: [])))]
+        let cleaned = huge.sanitized().combos[0].macro.map(\.step)
+        check("delay clamped, impossible key dropped", cleaned == [.delay(AppConfig.Limits.delay)], "\(cleaned)")
+
         // Config files from before the layout fixer still load.
         let old = #"{"enabled":true,"remaps":[],"combos":[],"knownDevices":[]}"#
         let decoded = try? JSONDecoder().decode(AppConfig.self, from: Data(old.utf8))
@@ -327,8 +349,9 @@ enum DebugSnapshot {
         let roundTrip = (try? ConfigStore.encode(config)).flatMap { try? JSONDecoder().decode(AppConfig.self, from: $0) }
         check("layout fixer settings round-trip", roundTrip == config)
 
-        print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
-        exit(failures == 0 ? 0 : 1)
+        let summary = [failures].map { $0 == 0 ? "ALL PASSED" : "\($0) FAILED" }[0]
+        print(summary)
+        exit(Int32(min(failures, 1)))
     }
 
     /// The ANSI key that types `c` in the US layout.

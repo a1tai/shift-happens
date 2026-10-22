@@ -6,10 +6,12 @@ struct MenuBarContent: View {
     @EnvironmentObject private var state: AppState
 
     var body: some View {
-        Toggle("Bindings on", isOn: $state.config.enabled)
+        // The main switch: pauses remaps, combos and the layout fixer together.
+        Toggle("Active", isOn: $state.config.enabled)
         Text(counted(state.config.remaps.filter(\.enabled).count, "remap") + " · "
              + counted(state.config.combos.filter(\.enabled).count, "combo"))
         Toggle("Layout Fixer", isOn: $state.config.layoutFixer.enabled)
+            .disabled(!state.config.enabled)
         if !state.inputMonitoringGranted
             || (!state.accessibilityGranted && (!state.config.combos.isEmpty || state.config.layoutFixer.enabled)) {
             Text("⚠︎ Missing permissions, open the window")

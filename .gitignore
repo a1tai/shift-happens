@@ -1,5 +1,9 @@
 .build/
 build/
+*.zip
 *.xcodeproj/xcuserdata/
+xcuserdata/
 .swiftpm/
 .DS_Store
+.archive/
+.signing-identity

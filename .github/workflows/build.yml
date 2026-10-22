@@ -11,6 +11,11 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - name: Build (debug)
+        run: swift build
+      - name: Self-test
+        # The debug build checks key conversion, recording, macros, config limits and more, then exits.
+        run: KB_SELFTEST=1 .build/debug/KeyBindingApp
       - name: Build app
         run: ./scripts/build-app.sh
       - uses: actions/upload-artifact@v4

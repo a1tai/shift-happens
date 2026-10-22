@@ -41,10 +41,6 @@ enum RemapEngine {
         return result
     }
 
-    static func clearAll(devices: [DeviceRef]) {
-        apply([], clearDevices: devices)
-    }
-
     static func mappingJSON(_ remaps: [KeyRemap]) -> String {
         let items = remaps.map {
             "{\"HIDKeyboardModifierMappingSrc\":\($0.from.hidutilValue),\"HIDKeyboardModifierMappingDst\":\($0.to.hidutilValue)}"

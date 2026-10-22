@@ -1,7 +1,6 @@
 import AppKit
 import Carbon
 import Combine
-import os
 import Foundation
 
 /// The key monitor's last press: what the keyboard sent and what macOS made of it.
@@ -63,7 +62,6 @@ final class AppState: NSObject, ObservableObject {
     @Published private(set) var activeRecorder: UUID?
     /// A text or number field in a macro step is being edited: Return finishes that, it doesn't save the sheet.
     @Published var isEditingMacroField = false
-    private var endActiveRecorder: (() -> Void)?
     /// When the last recording ended. The key press that ended it (the recorded key, or Esc) reaches the
     /// window a moment after the raw input, and must not act there (Esc would close the sheet, Return save it).
     private var recordingEndedAt: Date?
@@ -219,13 +217,9 @@ final class AppState: NSObject, ObservableObject {
         if layoutFixer.trigger != settings.trigger { layoutFixer.trigger = settings.trigger }
         layoutFixer.switchesWhenNothingToFix = settings.switchesWhenNothingToFix
         layoutFixer.switchesAfterFixing = settings.switchesAfterFixing
-        if layoutFixer.takesFnFromHID != inputMonitoringGranted {
-            layoutFixer.takesFnFromHID = inputMonitoringGranted
-            if inputMonitoringGranted {
-                os_log("Keyboard reports an fn key: %{public}@", hid.hasKey(page: KeyCatalog.fn.page, usage: KeyCatalog.fn.usage) ? "yes" : "no")
-            }
-        }
-        if settings.enabled {
+        layoutFixer.takesFnFromHID = inputMonitoringGranted
+        // The main switch pauses the layout fixer like everything else.
+        if config.enabled && settings.enabled {
             if !layoutFixer.isRunning && !layoutFixer.start() { accessibilityMissing() }
         } else if layoutFixer.isRunning {
             layoutFixer.stop()
@@ -348,22 +342,13 @@ final class AppState: NSObject, ObservableObject {
     /// The keyboard a new remap or preset is for by default: an external one if connected.
     var defaultKeyboard: DeviceRef? { devices.first { !$0.isBuiltIn && !$0.isMouse } }
 
-    /// Remaps that apply to `device` (nil = show every remap).
-    func remaps(for device: DeviceRef?) -> [KeyRemap] {
-        guard let device else { return config.remaps }
-        return config.remaps.filter { $0.device == nil || $0.device?.matches(device) == true }
-    }
-
-
     // MARK: - Recording
 
     /// Starts listening for a recorder. Any other recorder is stopped first. While recording, the app's
     /// window swallows key presses, combos and the layout fixer pause, and macOS's own shortcuts are off.
-    /// `onEnd` runs when this recording ends for whatever reason.
-    func startRecording(_ id: UUID, onEnd: @escaping () -> Void = {}) {
+    func startRecording(_ id: UUID) {
         if let active = activeRecorder { stopRecording(active) }
         activeRecorder = id
-        endActiveRecorder = onEnd
         swallowLocalKeys += 1
         combos.isPaused = true
         if !DebugSnapshot.isSelfTest { SystemShortcuts.disable() }
@@ -380,9 +365,6 @@ final class AppState: NSObject, ObservableObject {
         combos.isPaused = false
         SystemShortcuts.restore()
         recordingEndedAt = Date()
-        let end = endActiveRecorder
-        endActiveRecorder = nil
-        end?()
     }
 
     // MARK: - Who is looking at key presses

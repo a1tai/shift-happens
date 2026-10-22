@@ -12,7 +12,7 @@ enum ConfigStore {
     static func load() -> AppConfig {
         guard let data = try? Data(contentsOf: fileURL) else { return AppConfig() }
         do {
-            return try JSONDecoder().decode(AppConfig.self, from: data)
+            return try JSONDecoder().decode(AppConfig.self, from: data).sanitized()
         } catch {
             NSLog("KeyBindingApp: cannot read config, starting empty: \(error)")
             // Keep the unreadable file instead of overwriting it silently.

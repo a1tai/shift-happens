@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Self-test
+        run: swift build && KB_SELFTEST=1 .build/debug/KeyBindingApp
+      - name: Build app
+        # Signed ad hoc: users see a Gatekeeper warning on first open (see README).
+        run: ./scripts/build-app.sh
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "build/Shift Happens.zip" --title "Shift Happens $GITHUB_REF_NAME" --generate-notes

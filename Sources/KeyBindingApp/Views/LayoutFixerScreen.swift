@@ -84,6 +84,10 @@ struct LayoutFixerScreen: View {
 
     @ViewBuilder
     private var warnings: some View {
+        if state.config.layoutFixer.enabled && !state.config.enabled {
+            WarningRow(text: "Shift Happens is paused, so the Layout Fixer is too. Resume it with the switch at the bottom of the sidebar.",
+                       button: "Resume", action: { state.config.enabled = true })
+        }
         if state.config.layoutFixer.enabled && !state.accessibilityGranted {
             WarningRow(text: "Needs Accessibility access to watch typing and replace text.",
                        button: "Allow…", action: { Permissions.request(.accessibility) })

@@ -50,7 +50,7 @@ struct ContentView: View {
                 }
                 Section("Tools") {
                     Label(SidebarItem.layoutFixer.title, systemImage: SidebarItem.layoutFixer.icon)
-                        .badge(state.config.layoutFixer.enabled ? Text("On") : nil)
+                        .badge(state.config.layoutFixer.enabled ? Text(state.config.enabled ? "On" : "Paused") : nil)
                         .tag(SidebarItem.layoutFixer)
                 }
                 Section {
@@ -82,18 +82,19 @@ struct ContentView: View {
     }
 }
 
-/// Master switch plus a short status line at the bottom of the sidebar.
+/// The main switch (pauses remaps, combos and the layout fixer together) plus a status line.
 private struct StatusFooter: View {
     @EnvironmentObject private var state: AppState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Toggle(isOn: $state.config.enabled) {
-                Text(state.config.enabled ? "Bindings on" : "Bindings off")
+                Text(state.config.enabled ? "Active" : "Paused")
                     .font(.callout.weight(.medium))
             }
             .toggleStyle(.switch)
             .controlSize(.small)
+            .help("Pauses or resumes everything: remaps, combos and the Layout Fixer")
             if let error = state.lastError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)

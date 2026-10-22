@@ -133,6 +133,12 @@ struct KeyChord: Codable, Hashable {
         self.mouseButton = mouseButton
     }
 
+    /// A real macOS key code (0…127) or an extra mouse button (2…31), and known modifier bits only.
+    var isValid: Bool {
+        if let mouseButton { return (2...31).contains(mouseButton) && modifiers.rawValue & ~0x1F == 0 }
+        return keyCode <= 0x7F && modifiers.rawValue & ~0x1F == 0
+    }
+
     static func mouse(_ button: Int, modifiers: ModifierSet = []) -> KeyChord {
         KeyChord(keyCode: 0, modifiers: modifiers, mouseButton: button)
     }
@@ -258,6 +264,44 @@ struct LayoutFixerSettings: Codable, Equatable {
 
 /// Everything the app saves to disk.
 struct AppConfig: Codable, Equatable {
+    /// Limits for anything read from disk or imported, so a broken or hostile file can't hang the app
+    /// or make it type for minutes.
+    enum Limits {
+        static let bindings = 500
+        static let macroSteps = 1_000
+        static let delay = 60_000        // ms per delay step
+        static let stepDelay = 5_000     // ms between steps
+        static let textLength = 1_000    // characters per Type text step
+        static let noteLength = 200
+    }
+
+    /// The config with every list, delay and text cut to the limits, and impossible keys dropped.
+    func sanitized() -> AppConfig {
+        var config = self
+        config.remaps = Array(remaps.filter { $0.from.page <= 0xFF && $0.to.page <= 0xFF }.prefix(Limits.bindings))
+        config.knownDevices = Array(knownDevices.prefix(Limits.bindings))
+        config.combos = Array(combos.prefix(Limits.bindings)).compactMap { combo in
+            var combo = combo
+            guard combo.trigger.isValid, combo.output.isValid else { return nil }
+            combo.note = String(combo.note.prefix(Limits.noteLength))
+            combo.stepDelay = min(max(combo.stepDelay, 0), Limits.stepDelay)
+            combo.macro = Array(combo.macro.prefix(Limits.macroSteps)).compactMap { item in
+                var item = item
+                switch item.step {
+                case .press(let key), .keyDown(let key), .keyUp(let key):
+                    guard key.isValid else { return nil }
+                case .delay(let ms):
+                    item.step = .delay(min(max(ms, 0), Limits.delay))
+                case .text(let text):
+                    item.step = .text(String(text.prefix(Limits.textLength)))
+                }
+                return item
+            }
+            return combo
+        }
+        return config
+    }
+
     var remaps: [KeyRemap] = []
     var combos: [ComboBinding] = []
     /// Master switch from the menu bar.
