@@ -1,6 +1,7 @@
-# KeyBindingApp
+# Shift Happens
 
-A native macOS app (SwiftUI) that makes a Windows keyboard work well with a Mac:
+A native macOS app (SwiftUI) that makes a Windows keyboard work well with a Mac, for everyone who misses
+the one-key Print Screen and has to press three keys for a screenshot instead:
 it shows the code of every key you press, remaps keys and turns one key combination into another.
 Bindings are saved and restored after a restart.
 
@@ -21,7 +22,8 @@ Bindings are saved and restored after a restart.
 - **Presets** in Settings: swap Win and Alt, Print Screen, Home/End like in Windows, Ctrl shortcuts like in Windows.
 - **After restart** the app starts in the background (LaunchAgent), reapplies the bindings and lives in the menu bar.
   Bindings are reapplied whenever a keyboard is connected.
-- Export and import of settings as JSON. Settings live in `~/Library/Application Support/KeyBindingApp/config.json`.
+- Export and import of settings as JSON. Settings live in `~/Library/Application Support/KeyBindingApp/config.json` (the folder, bundle ID and launch agent
+  keep the original KeyBindingApp name, so permissions and bindings survive the rename).
 
 ## Building
 
@@ -29,14 +31,14 @@ Needs macOS 13+ and Xcode or the Command Line Tools (`xcode-select --install`).
 
 ```bash
 ./scripts/build-app.sh
-open build/KeyBindingApp.app
+open "build/Shift Happens.app"
 ```
 
-Move `build/KeyBindingApp.app` to Applications and launch it from there, so launch at login points to the right place.
+Move `build/Shift Happens.app` to Applications and launch it from there, so launch at login points to the right place.
 You can also open `Package.swift` in Xcode and run it from there.
 
 If the app was downloaded from GitHub Actions, macOS may refuse to open it. Then run
-`xattr -dr com.apple.quarantine /Applications/KeyBindingApp.app` or right-click → Open.
+`xattr -dr com.apple.quarantine "/Applications/Shift Happens.app"` or right-click → Open.
 
 `swift scripts/make-icon.swift` redraws the app icon into `Resources/AppIcon.icns`.
 

@@ -15,10 +15,10 @@ struct MenuBarContent: View {
             Text("⚠︎ Missing permissions, open the window")
         }
         Divider()
-        Button("Open KeyBindingApp…") { AppDelegate.shared?.showMainWindow() }
+        Button("Open Shift Happens…") { AppDelegate.shared?.showMainWindow() }
             .keyboardShortcut("o")
         Divider()
-        Button("Quit") { NSApp.terminate(nil) }
+        Button("Quit Shift Happens") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }

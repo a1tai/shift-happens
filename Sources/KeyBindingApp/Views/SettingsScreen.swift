@@ -96,7 +96,7 @@ struct SettingsScreen: View {
     private func exportConfig() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "KeyBindingApp.json"
+        panel.nameFieldStringValue = "Shift Happens.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try ConfigStore.encode(state.config).write(to: url, options: .atomic)

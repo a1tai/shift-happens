@@ -4,7 +4,9 @@ import AppKit
 
 let canvas: CGFloat = 1024
 
-func drawIcon(in ctx: CGContext) {
+/// Shift Happens: a Shift keycap that has just toppled over. `pixels` is the output size;
+/// below 64 px the motion lines are left out so the icon stays readable.
+func drawIcon(in ctx: CGContext, pixels: Int) {
     // macOS icon grid: 824×824 tile centered on the 1024 canvas, with a soft drop shadow.
     let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
     let tilePath = CGPath(roundedRect: tile, cornerWidth: 185, cornerHeight: 185, transform: nil)
@@ -20,70 +22,81 @@ func drawIcon(in ctx: CGContext) {
     ctx.addPath(tilePath)
     ctx.clip()
     let background = CGGradient(colorsSpace: nil, colors: [
-        NSColor(srgbRed: 0.36, green: 0.42, blue: 0.98, alpha: 1).cgColor,
-        NSColor(srgbRed: 0.16, green: 0.20, blue: 0.62, alpha: 1).cgColor,
+        NSColor(srgbRed: 1.00, green: 0.72, blue: 0.36, alpha: 1).cgColor,
+        NSColor(srgbRed: 0.96, green: 0.36, blue: 0.38, alpha: 1).cgColor,
     ] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(background, start: CGPoint(x: 0, y: tile.maxY), end: CGPoint(x: 0, y: tile.minY), options: [])
+    ctx.drawLinearGradient(background, start: CGPoint(x: tile.minX, y: tile.maxY), end: CGPoint(x: tile.maxX, y: tile.minY), options: [])
+
+    // The "floor" the key fell onto: a soft contact shadow.
+    ctx.setFillColor(NSColor.black.withAlphaComponent(0.16).cgColor)
+    ctx.fillEllipse(in: CGRect(x: 300, y: 205, width: 470, height: 70))
+
+    if pixels >= 64 { drawMotionLines(in: ctx) }
     ctx.restoreGState()
 
-    // Two keycaps with a swap arrow between them.
-    drawKeycap(in: ctx, rect: CGRect(x: 196, y: 456, width: 300, height: 300), glyph: "⌥")
-    drawKeycap(in: ctx, rect: CGRect(x: 528, y: 268, width: 300, height: 300), glyph: "⌘")
-    drawSwapArrow(in: ctx)
+    // The keycap, tipped over to the right around its bottom-right corner.
+    ctx.saveGState()
+    ctx.translateBy(x: 560, y: 520)
+    ctx.rotate(by: -23 * .pi / 180)
+    drawKeycap(in: ctx, rect: CGRect(x: -230, y: -230, width: 460, height: 460))
+    ctx.restoreGState()
 }
 
-func drawKeycap(in ctx: CGContext, rect: CGRect, glyph: String) {
-    let base = CGPath(roundedRect: rect, cornerWidth: 56, cornerHeight: 56, transform: nil)
+func drawMotionLines(in ctx: CGContext) {
     ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: -14), blur: 22, color: NSColor.black.withAlphaComponent(0.4).cgColor)
+    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.75).cgColor)
+    ctx.setLineCap(.round)
+    // Arcs trailing behind the top-left corner, as if it swung down from upright.
+    let center = CGPoint(x: 700, y: 300)
+    for (radius, width, from, to) in [(560.0, 22.0, 128.0, 146.0), (500.0, 18.0, 133.0, 148.0), (620.0, 16.0, 125.0, 138.0)] {
+        ctx.setLineWidth(width)
+        ctx.addArc(center: center, radius: radius, startAngle: from * .pi / 180, endAngle: to * .pi / 180, clockwise: false)
+        ctx.strokePath()
+    }
+    ctx.restoreGState()
+}
+
+func drawKeycap(in ctx: CGContext, rect: CGRect) {
+    let base = CGPath(roundedRect: rect, cornerWidth: 80, cornerHeight: 80, transform: nil)
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: 0, height: -18), blur: 30, color: NSColor.black.withAlphaComponent(0.35).cgColor)
     ctx.addPath(base)
-    ctx.setFillColor(NSColor(white: 0.82, alpha: 1).cgColor)
+    ctx.setFillColor(NSColor(white: 0.80, alpha: 1).cgColor)
     ctx.fillPath()
     ctx.restoreGState()
 
     // Top face, slightly inset and raised, like a real keycap.
-    let top = rect.insetBy(dx: 22, dy: 22).offsetBy(dx: 0, dy: 12)
-    let topPath = CGPath(roundedRect: top, cornerWidth: 40, cornerHeight: 40, transform: nil)
+    let top = rect.insetBy(dx: 30, dy: 30).offsetBy(dx: 0, dy: 16)
+    let topPath = CGPath(roundedRect: top, cornerWidth: 56, cornerHeight: 56, transform: nil)
     ctx.saveGState()
     ctx.addPath(topPath)
     ctx.clip()
     let face = CGGradient(colorsSpace: nil, colors: [
         NSColor.white.cgColor,
-        NSColor(white: 0.92, alpha: 1).cgColor,
+        NSColor(white: 0.91, alpha: 1).cgColor,
     ] as CFArray, locations: [0, 1])!
     ctx.drawLinearGradient(face, start: CGPoint(x: 0, y: top.maxY), end: CGPoint(x: 0, y: top.minY), options: [])
     ctx.restoreGState()
 
-    let font = NSFont.systemFont(ofSize: 150, weight: .medium)
-    let attributes: [NSAttributedString.Key: Any] = [
-        .font: font,
-        .foregroundColor: NSColor(srgbRed: 0.18, green: 0.22, blue: 0.55, alpha: 1),
-    ]
-    let text = NSAttributedString(string: glyph, attributes: attributes)
-    let size = text.size()
-    text.draw(at: CGPoint(x: top.midX - size.width / 2, y: top.midY - size.height / 2))
-}
-
-func drawSwapArrow(in ctx: CGContext) {
+    // The ⇧ glyph, drawn as a path so it looks the same everywhere.
+    let w = top.width * 0.52, h = top.height * 0.58
+    let x = top.midX - w / 2, y = top.midY - h / 2
+    let stem = w * 0.42
+    let arrow = CGMutablePath()
+    arrow.move(to: CGPoint(x: top.midX, y: y + h))
+    arrow.addLine(to: CGPoint(x: x + w, y: y + h * 0.48))
+    arrow.addLine(to: CGPoint(x: top.midX + stem / 2, y: y + h * 0.48))
+    arrow.addLine(to: CGPoint(x: top.midX + stem / 2, y: y))
+    arrow.addLine(to: CGPoint(x: top.midX - stem / 2, y: y))
+    arrow.addLine(to: CGPoint(x: top.midX - stem / 2, y: y + h * 0.48))
+    arrow.addLine(to: CGPoint(x: x, y: y + h * 0.48))
+    arrow.closeSubpath()
     ctx.saveGState()
-    ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.95).cgColor)
-    ctx.setFillColor(NSColor.white.withAlphaComponent(0.95).cgColor)
-    ctx.setLineWidth(30)
-    ctx.setLineCap(.round)
-
-    // Arc from the lower-left area to the right keycap.
-    let start = CGPoint(x: 300, y: 400)
-    let end = CGPoint(x: 490, y: 300)
-    ctx.move(to: start)
-    ctx.addQuadCurve(to: end, control: CGPoint(x: 300, y: 300))
+    ctx.addPath(arrow)
+    ctx.setLineJoin(.round)
+    ctx.setLineWidth(top.width * 0.075)
+    ctx.setStrokeColor(NSColor(srgbRed: 0.78, green: 0.27, blue: 0.24, alpha: 1).cgColor)
     ctx.strokePath()
-
-    // Arrowhead pointing right.
-    ctx.move(to: CGPoint(x: end.x + 34, y: end.y))
-    ctx.addLine(to: CGPoint(x: end.x - 22, y: end.y + 40))
-    ctx.addLine(to: CGPoint(x: end.x - 22, y: end.y - 40))
-    ctx.closePath()
-    ctx.fillPath()
     ctx.restoreGState()
 }
 
@@ -95,7 +108,7 @@ func png(size: Int) -> Data {
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     let ctx = NSGraphicsContext.current!.cgContext
     ctx.scaleBy(x: CGFloat(size) / canvas, y: CGFloat(size) / canvas)
-    drawIcon(in: ctx)
+    drawIcon(in: ctx, pixels: size)
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!
 }

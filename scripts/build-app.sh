@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds build/KeyBindingApp.app (and a .zip next to it) from the Swift package.
+# Builds "build/Shift Happens.app" (and a .zip next to it) from the Swift package.
 # Needs Xcode or the Command Line Tools (xcode-select --install).
 #
 # By default the app is signed ad hoc. macOS ties the Input Monitoring and Accessibility
@@ -8,7 +8,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-APP_NAME="KeyBindingApp"
+# The executable keeps the package name; only the bundle carries the display name.
+EXECUTABLE="KeyBindingApp"
+APP_NAME="Shift Happens"
 APP="build/$APP_NAME.app"
 
 if swift build -c release --arch arm64 --arch x86_64 2>/dev/null; then
@@ -21,7 +23,7 @@ fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
+cp "$BIN_DIR/$EXECUTABLE" "$APP/Contents/MacOS/$EXECUTABLE"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
