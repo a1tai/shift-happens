@@ -433,13 +433,17 @@ private struct MacroKeyField: View {
             state.stopRecording(recorderID)
         } else if state.inputMonitoringGranted {
             state.startRecording(recorderID)
-            state.captureHandler = { event in
-                // The key as macOS sees it, after the remaps.
-                if let code = KeyCatalog.key(for: state.remapped(event.usage, from: event.device))?.macKeyCode {
-                    key = KeyChord(keyCode: code, modifiers: [])
-                }
-                state.stopRecording(recorderID)
-            }
+            listen()
+        }
+    }
+
+    /// Takes the next key press as macOS sees it (after the remaps); fn is ignored, so recording goes on.
+    private func listen() {
+        state.captureHandler = { event in
+            guard let code = KeyCatalog.key(for: state.remapped(event.usage, from: event.device))?.macKeyCode,
+                  code != KeyCatalog.fnKeyCode else { listen(); return }
+            key = KeyChord(keyCode: code, modifiers: [])
+            state.stopRecording(recorderID)
         }
     }
 }

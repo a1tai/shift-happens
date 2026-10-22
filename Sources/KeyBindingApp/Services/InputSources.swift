@@ -9,10 +9,9 @@ struct InputSourceInfo: Identifiable, Equatable {
     let name: String
     let language: String?
 
-    /// Short menu bar label: "Ру" for Russian, otherwise the capitalized language code ("En", "De").
+    /// Short menu bar label: the language code in capitals ("EN", "RU", "DE").
     var shortLabel: String {
-        guard let language else { return String(name.prefix(2)) }
-        return language.hasPrefix("ru") ? "Ру" : String(language.prefix(2)).capitalized
+        String((language ?? name).prefix(2)).uppercased()
     }
 }
 

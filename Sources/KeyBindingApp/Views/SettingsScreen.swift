@@ -23,6 +23,17 @@ struct SettingsScreen: View {
             }
 
             Section {
+                Toggle("Show input language in menu bar", isOn: $state.config.showsInputLanguage)
+                Text("Shows the current keyboard layout (EN, RU) next to Shift Happens's icon; its menu switches layouts. "
+                     + "To hide macOS's own input menu: System Settings → Keyboard → Text Input → Edit… → "
+                     + "Show Input menu in menu bar.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Menu bar")
+            }
+
+            Section {
                 Toggle("Launch at login", isOn: Binding(
                     get: { state.launchAtLogin },
                     set: { state.setLaunchAtLogin($0) }

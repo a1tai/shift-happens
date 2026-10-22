@@ -11,7 +11,13 @@ struct KeyBindingApp: App {
             MenuBarContent()
                 .environmentObject(state)
         } label: {
-            Image(systemName: state.config.enabled ? "keyboard.fill" : "keyboard")
+            let icon = state.config.enabled ? "keyboard.fill" : "keyboard"
+            if state.config.showsInputLanguage, let language = state.currentLayoutLabel {
+                // One Text with the symbol inside: a menu bar label shows a single view.
+                Text("\(Image(systemName: icon)) \(language)")
+            } else {
+                Image(systemName: icon)
+            }
         }
     }
 }

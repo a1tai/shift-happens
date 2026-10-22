@@ -66,7 +66,12 @@ enum KeyCatalog {
     /// Keys that make sense as a remap source (physical keyboard keys).
     static var sources: [KeyDef] { all.filter { $0.page == HIDPage.keyboard } }
     /// Keys that make sense as a remap target.
-    static var targets: [KeyDef] { all }
+    static var targets: [KeyDef] { all.filter { $0.hid != fn } }
+
+    /// The fn / 🌐 key (Apple vendor page). macOS handles it itself: an app can't post it, and remapping it
+    /// isn't reliable, so it is left out of remaps, combos and macros.
+    static let fn = HIDUsage(page: HIDPage.appleVendorTopCase, usage: 0x03)
+    static let fnKeyCode: UInt16 = 0x3F
     /// Keys that macOS can emit as virtual key codes (for combinations).
     /// Each macOS key code appears once (e.g. Print Screen and F13 are the same code).
     static let chordKeys: [KeyDef] = {
@@ -80,7 +85,7 @@ enum KeyCatalog {
     static let chordKeysWithModifiers: [KeyDef] = {
         var seen = Set<UInt16>()
         return all.filter { key in
-            guard let code = key.macKeyCode else { return false }
+            guard let code = key.macKeyCode, code != fnKeyCode else { return false }
             return seen.insert(code).inserted
         }
     }()

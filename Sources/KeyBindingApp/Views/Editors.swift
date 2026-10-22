@@ -338,11 +338,17 @@ struct KeyField: View {
         } else if state.inputMonitoringGranted {
             // Starting this recorder stops any other one.
             state.startRecording(recorderID)
-            state.captureHandler = { event in
-                usage = event.usage
-                onRecord(event)
-                state.stopRecording(recorderID)
-            }
+            listen()
+        }
+    }
+
+    /// Takes the next key press; fn is ignored (it can't be remapped), so recording goes on.
+    private func listen() {
+        state.captureHandler = { event in
+            guard event.usage != KeyCatalog.fn else { listen(); return }
+            usage = event.usage
+            onRecord(event)
+            state.stopRecording(recorderID)
         }
     }
 }

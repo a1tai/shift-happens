@@ -20,9 +20,11 @@ Bindings are saved and restored after a restart.
   Press and release the trigger key (either Option by default, or left/right Option, fn 🌐, Caps Lock) on its own.
   The last word is retyped in the next layout and the layout switches; with a selection, the selected text is converted;
   with nothing typed, the layout just switches. Press again to undo. Works with three or more layouts and dead keys.
-  Off by default; can also show the current layout (En / Ру) in the menu bar.
+  Off by default.
 - **Mouse buttons as triggers**: a combo can fire on the middle, back or forward mouse button (optionally with
   modifiers), for example Mouse 4 → ⌘[ so the Back button works in Safari and Finder. Left and right clicks are never touched.
+- **Input language in the menu bar**: the current layout (EN, RU) next to the app's icon, with a menu to switch,
+  so macOS's own input menu can be turned off (System Settings → Keyboard → Text Input → Edit…).
 - **Presets** in Settings: swap Win and Alt, Print Screen, Home/End like in Windows, Ctrl shortcuts like in Windows.
 - **After restart** the app starts in the background (LaunchAgent), reapplies the bindings and lives in the menu bar.
   Bindings are reapplied whenever a keyboard is connected.
@@ -94,3 +96,6 @@ To turn everything off quickly, use the switch in the menu bar. To clear the sys
 `hidutil property --set '{"UserKeyMapping":[]}'`.
 
 The layout fixer is adapted from Perekluk (MIT License), see `THIRD_PARTY_NOTICES.md`.
+
+The fn / 🌐 key is not offered for remaps, combos or macros: macOS handles it itself and doesn't accept it from apps.
+It can still be the Layout Fixer's trigger.

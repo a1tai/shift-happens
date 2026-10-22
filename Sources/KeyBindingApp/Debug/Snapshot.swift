@@ -297,10 +297,21 @@ enum DebugSnapshot {
         let oldChord = #"{"keyCode":105,"modifiers":0}"#
         check("old triggers have no mouse button", (try? JSONDecoder().decode(KeyChord.self, from: Data(oldChord.utf8)))?.mouseButton == nil)
 
+        // The fn key is left out of remaps and macros; saved bindings with it are flagged.
+        check("fn not a remap target", !KeyCatalog.targets.contains { $0.hid == KeyCatalog.fn })
+        check("fn not a remap source", !KeyCatalog.sources.contains { $0.hid == KeyCatalog.fn })
+        check("fn not a macro key", !KeyCatalog.chordKeysWithModifiers.contains { $0.macKeyCode == KeyCatalog.fnKeyCode })
+        check("fn not a shortcut key", !KeyCatalog.chordKeys.contains { $0.macKeyCode == KeyCatalog.fnKeyCode })
+        var fnCombo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []), output: KeyChord(keyCode: 0, modifiers: []))
+        fnCombo.macro = [MacroItem(step: .keyDown(KeyChord(keyCode: KeyCatalog.fnKeyCode, modifiers: [])))]
+        check("saved fn combo is flagged", fnCombo.usesFn && !back.usesFn)
+        check("saved fn remap is flagged", KeyRemap(from: KeyCatalog.fn, to: HIDUsage(page: 7, usage: 4)).usesFn)
+        check("layout label", InputSourceInfo(id: "x", name: "Russian – PC", language: "ru").shortLabel == "RU")
+
         // Config files from before the layout fixer still load.
         let old = #"{"enabled":true,"remaps":[],"combos":[],"knownDevices":[]}"#
         let decoded = try? JSONDecoder().decode(AppConfig.self, from: Data(old.utf8))
-        check("old config decodes", decoded?.layoutFixer == LayoutFixerSettings())
+        check("old config decodes", decoded?.layoutFixer == LayoutFixerSettings() && decoded?.showsInputLanguage == true)
         var config = AppConfig()
         config.layoutFixer.enabled = true
         config.layoutFixer.trigger = .rightOption

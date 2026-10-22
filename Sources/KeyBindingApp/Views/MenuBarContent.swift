@@ -14,6 +14,18 @@ struct MenuBarContent: View {
             || (!state.accessibilityGranted && (!state.config.combos.isEmpty || state.config.layoutFixer.enabled)) {
             Text("⚠︎ Missing permissions, open the window")
         }
+        if state.inputSources.count > 1 {
+            Divider()
+            Picker("Keyboard Layout", selection: Binding(
+                get: { state.currentInputSourceID ?? "" },
+                set: { state.selectInputSource($0) }
+            )) {
+                ForEach(state.inputSources) { source in
+                    Text(source.name).tag(source.id)
+                }
+            }
+            .pickerStyle(.inline)
+        }
         Divider()
         Button("Open Shift Happens…") { AppDelegate.shared?.showMainWindow() }
             .keyboardShortcut("o")

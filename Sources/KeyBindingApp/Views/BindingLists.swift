@@ -50,6 +50,7 @@ struct RemapsScreen: View {
                         HStack {
                             Image(systemName: "arrow.right").foregroundStyle(.secondary)
                             KeyBadge(text: KeyCatalog.name(for: remap.to), highlighted: remap.enabled)
+                            if remap.usesFn { FnUnsupportedLabel() }
                         }
                     }
                     TableColumn("Keyboard") { remap in
@@ -130,6 +131,7 @@ struct CombosScreen: View {
                             if combo.isMacro {
                                 Text(counted(combo.macro.count, "step")).font(.caption).foregroundStyle(.secondary)
                             }
+                            if combo.usesFn { FnUnsupportedLabel() }
                         }
                     }
                     TableColumn("Note") { combo in
@@ -200,5 +202,15 @@ struct EmptyState: View {
             Text(text).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 420)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Shown on bindings saved before the fn key was left out: they can't work, but are kept until deleted.
+struct FnUnsupportedLabel: View {
+    var body: some View {
+        Label("fn not supported", systemImage: "exclamationmark.triangle.fill")
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .help("macOS handles the fn key itself, so this binding can't work. Edit or delete it.")
     }
 }

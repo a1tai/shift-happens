@@ -24,7 +24,6 @@ struct LayoutFixerScreen: View {
                             Text(trigger.title).tag(trigger)
                         }
                     }
-                    Toggle("Show the current layout in the menu bar", isOn: settings.showsLayoutInMenuBar)
                     warnings
                 }
 

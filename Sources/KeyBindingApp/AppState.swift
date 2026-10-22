@@ -77,7 +77,6 @@ final class AppState: NSObject, ObservableObject {
     private var permissionTimer: Timer?
     private var reapplyWork: DispatchWorkItem?
     private let hidutilQueue = DispatchQueue(label: "KeyBindingApp.hidutil")
-    private var layoutStatusItem: NSStatusItem?
     /// macOS's Accessibility dialog is triggered at most once per launch, not on every check.
     private var askedForAccessibility = false
     private static let onboardingDoneKey = "onboardingDone"
@@ -214,7 +213,6 @@ final class AppState: NSObject, ObservableObject {
         } else if layoutFixer.isRunning {
             layoutFixer.stop()
         }
-        updateLayoutStatusItem()
     }
 
     /// A feature that needs Accessibility is on but can't start: ask macOS once per launch.
@@ -235,30 +233,15 @@ final class AppState: NSObject, ObservableObject {
         let sources = layoutFixer.sources.enabled()
         if sources != inputSources { inputSources = sources }
         currentInputSourceID = layoutFixer.sources.currentID()
-        updateLayoutStatusItem()
     }
 
-    /// A second menu bar item with the current layout (En / Ру), next to the keyboard icon.
-    private func updateLayoutStatusItem() {
-        guard config.layoutFixer.showsLayoutInMenuBar else {
-            if let item = layoutStatusItem { NSStatusBar.system.removeStatusItem(item) }
-            layoutStatusItem = nil
-            return
-        }
-        if layoutStatusItem == nil {
-            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-            item.button?.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
-            item.button?.target = self
-            item.button?.action = #selector(switchLayoutFromMenuBar)
-            item.button?.toolTip = "Current keyboard layout. Click to switch."
-            layoutStatusItem = item
-        }
-        let current = inputSources.first { $0.id == currentInputSourceID }
-        layoutStatusItem?.button?.title = current?.shortLabel ?? "—"
+    /// The current input language for the menu bar ("EN", "RU").
+    var currentLayoutLabel: String? {
+        inputSources.first { $0.id == currentInputSourceID }?.shortLabel
     }
 
-    @objc private func switchLayoutFromMenuBar() {
-        layoutFixer.sources.selectNext()
+    func selectInputSource(_ id: String) {
+        layoutFixer.sources.select(id)
     }
 
     // MARK: - Editing

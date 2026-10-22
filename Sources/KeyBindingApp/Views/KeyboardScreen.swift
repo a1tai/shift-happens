@@ -154,12 +154,14 @@ struct KeyboardScreen: View {
     private func comboCount(for cap: KeyCap) -> Int { combos(for: cap).count }
 
     private func tooltip(for cap: KeyCap) -> String {
+        if cap.hid == KeyCatalog.fn { return "fn can't be remapped: macOS handles it itself" }
         var text = KeyCatalog.name(for: cap.hid)
         if let remap = remap(for: cap) { text += " → " + KeyCatalog.name(for: remap.to) }
         return text
     }
 
     private func edit(_ cap: KeyCap) {
+        guard cap.hid != KeyCatalog.fn else { return } // macOS keeps fn to itself
         editing = remap(for: cap) ?? KeyRemap(from: cap.hid, to: cap.hid, device: device)
     }
 }
@@ -277,6 +279,7 @@ private struct KeyCapView: View {
             }
         }
         .contentShape(Rectangle())
+        .opacity(cap.hid == KeyCatalog.fn ? 0.4 : 1)
         .animation(.easeOut(duration: 0.08), value: isPressed)
     }
 }

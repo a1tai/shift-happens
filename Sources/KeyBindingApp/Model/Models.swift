@@ -61,6 +61,9 @@ struct KeyRemap: Codable, Hashable, Identifiable {
     /// nil means every keyboard, including the MacBook's built-in one.
     var device: DeviceRef?
     var enabled = true
+
+    /// Saved before fn was left out of remaps.
+    var usesFn: Bool { from == KeyCatalog.fn || to == KeyCatalog.fn }
 }
 
 struct ModifierSet: OptionSet, Codable, Hashable {
@@ -180,6 +183,18 @@ struct ComboBinding: Codable, Hashable, Identifiable {
     var repeatsWhileHeld = false
 
     var isMacro: Bool { !macro.isEmpty }
+
+    /// Saved before fn was left out: a trigger, output or macro step that is the fn key. Such a combo can't work.
+    var usesFn: Bool {
+        let fn = KeyCatalog.fnKeyCode
+        let keys = [trigger, output] + macro.compactMap { item -> KeyChord? in
+            switch item.step {
+            case .press(let c), .keyDown(let c), .keyUp(let c): return c
+            default: return nil
+            }
+        }
+        return keys.contains { $0.mouseButton == nil && $0.keyCode == fn }
+    }
     var outputSummary: String { isMacro ? macro.summary : output.display }
 
     init(trigger: KeyChord, output: KeyChord, note: String = "", enabled: Bool = true) {
@@ -227,8 +242,6 @@ enum LayoutTrigger: String, Codable, CaseIterable, Identifiable {
 struct LayoutFixerSettings: Codable, Equatable {
     var enabled = false
     var trigger: LayoutTrigger = .bothOptions
-    /// Shows the current layout (En / Ру) as a separate menu bar item.
-    var showsLayoutInMenuBar = false
 
     init() {}
 
@@ -236,7 +249,6 @@ struct LayoutFixerSettings: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
         trigger = (try? c.decodeIfPresent(LayoutTrigger.self, forKey: .trigger)) ?? .bothOptions
-        showsLayoutInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .showsLayoutInMenuBar) ?? false
     }
 }
 
@@ -249,6 +261,9 @@ struct AppConfig: Codable, Equatable {
     /// Devices we have applied per-device mappings to, so they can be cleared later.
     var knownDevices: [DeviceRef] = []
     var layoutFixer = LayoutFixerSettings()
+    /// The current input language ("EN", "RU") next to the app's menu bar icon, so the system's own
+    /// input menu can be turned off.
+    var showsInputLanguage = true
 
     init() {}
 
@@ -260,5 +275,6 @@ struct AppConfig: Codable, Equatable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         knownDevices = try c.decodeIfPresent([DeviceRef].self, forKey: .knownDevices) ?? []
         layoutFixer = try c.decodeIfPresent(LayoutFixerSettings.self, forKey: .layoutFixer) ?? LayoutFixerSettings()
+        showsInputLanguage = try c.decodeIfPresent(Bool.self, forKey: .showsInputLanguage) ?? true
     }
 }
