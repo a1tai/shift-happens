@@ -8,7 +8,8 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    # Intel runners: the arm64 ones were often full and never picked up the job. The app is still built universal.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
       - name: Build (debug)
