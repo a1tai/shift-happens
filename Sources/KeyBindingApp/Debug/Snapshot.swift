@@ -315,6 +315,7 @@ enum DebugSnapshot {
         fnCombo.macro = [MacroItem(step: .keyDown(KeyChord(keyCode: KeyCatalog.fnKeyCode, modifiers: [])))]
         check("saved fn combo is flagged", fnCombo.usesFn && !back.usesFn)
         check("saved fn remap is flagged", KeyRemap(from: KeyCatalog.fn, to: HIDUsage(page: 7, usage: 4)).usesFn)
+        check("Emoji & Symbols viewer exists", InputSources().hasViewer(.emojiAndSymbols))
         check("layout label", InputSourceInfo(id: "x", name: "Russian – PC", language: "ru").shortLabel == "RU")
 
         // Config files from before the layout fixer still load.

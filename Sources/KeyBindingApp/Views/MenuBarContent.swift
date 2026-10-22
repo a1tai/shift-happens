@@ -26,6 +26,11 @@ struct MenuBarContent: View {
             }
             .pickerStyle(.inline)
         }
+        Button("Show Emoji & Symbols") { state.layoutFixer.sources.show(.emojiAndSymbols) }
+        // Gone from recent macOS (the Accessibility Keyboard replaced it); shown only where it exists.
+        if state.layoutFixer.sources.hasViewer(.keyboard) {
+            Button("Show Keyboard Viewer") { state.layoutFixer.sources.show(.keyboard) }
+        }
         Divider()
         Button("Open Shift Happens…") { AppDelegate.shared?.showMainWindow() }
             .keyboardShortcut("o")

@@ -66,6 +66,30 @@ final class InputSources {
         if let current = currentID(), let next = nextID(after: current) { select(next) }
     }
 
+    // MARK: - System viewers
+
+    enum Viewer {
+        case emojiAndSymbols, keyboard
+
+        fileprivate var type: CFString {
+            self == .emojiAndSymbols ? kTISTypeCharacterPalette : kTISTypeKeyboardViewer
+        }
+    }
+
+    /// Whether macOS has this viewer (it is a special input source, not a layout).
+    func hasViewer(_ viewer: Viewer) -> Bool { viewerSource(viewer) != nil }
+
+    /// Opens the Emoji & Symbols or Keyboard Viewer window for the app in front, the way the system's
+    /// input menu does: by selecting the viewer's input source.
+    func show(_ viewer: Viewer) {
+        if let source = viewerSource(viewer) { TISSelectInputSource(source) }
+    }
+
+    private func viewerSource(_ viewer: Viewer) -> TISInputSource? {
+        let filter = [kTISPropertyInputSourceType as String: viewer.type as Any] as CFDictionary
+        return (TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource])?.first
+    }
+
     // MARK: - Conversion
 
     /// Retypes keystrokes through the layout `id`, dead keys included (^ + e → ê).
