@@ -88,7 +88,6 @@ final class AppState: NSObject, ObservableObject {
             options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
             reason: "Handles keyboard input: remaps, combos and the layout fixer"
         )
-        Self.migrateDefaults()
         // The key history option is gone; drop its stored setting.
         UserDefaults.standard.removeObject(forKey: "keyMonitorKeepsHistory")
         LaunchAgent.refreshIfNeeded()
@@ -326,17 +325,6 @@ final class AppState: NSObject, ObservableObject {
 
     func displayName(of device: DeviceRef) -> String {
         devices.contains { $0.matches(device) } ? device.name : device.name + " (not connected)"
-    }
-
-    /// Versions before the rename kept their preferences (welcome sheet seen, permissions asked) under
-    /// another bundle id; copy what isn't set yet.
-    private static func migrateDefaults() {
-        let defaults = UserDefaults.standard
-        // The app's bundle id before it was published; kept only to move old preferences over.
-        guard let old = defaults.persistentDomain(forName: "com.keybindingapp.KeyBindingApp") else { return }
-        for (key, value) in old where defaults.object(forKey: key) == nil && !key.hasPrefix("NS") {
-            defaults.set(value, forKey: key)
-        }
     }
 
     /// The keyboard a new remap or preset is for by default: an external one if connected.

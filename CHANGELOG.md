@@ -1,9 +1,12 @@
 # Changelog
 
+## 1.0.2 — 2026-10-22
+
+- No more code for moving settings over from the pre-release builds; the old name is gone everywhere.
+
 ## 1.0.1 — 2026-10-22
 
-- The program inside the app is now called ShiftHappens (was KeyBindingApp); settings, preferences and
-  launch at login carry over from earlier builds.
+- The program inside the app is now called ShiftHappens.
 - The app reports its version as 1.0.1; the release zip is named `Shift-Happens.zip`.
 - Release notes come from this changelog.
 

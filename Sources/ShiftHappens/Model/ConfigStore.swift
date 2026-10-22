@@ -2,28 +2,14 @@ import Foundation
 
 /// Loads and saves AppConfig as JSON in ~/Library/Application Support/Shift Happens/config.json.
 enum ConfigStore {
-    private static var base: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0] }
-
-    static var directory: URL { base.appendingPathComponent("Shift Happens", isDirectory: true) }
-
-    /// Where versions before the rename kept their settings.
-    static var oldDirectory: URL { base.appendingPathComponent("KeyBindingApp", isDirectory: true) }
-
-    /// Moves settings from the old folder to the new one, once, if only the old one exists.
-    static func migrateIfNeeded() {
-        let fm = FileManager.default
-        guard !fm.fileExists(atPath: directory.path), fm.fileExists(atPath: oldDirectory.path) else { return }
-        do {
-            try fm.moveItem(at: oldDirectory, to: directory)
-        } catch {
-            NSLog("Shift Happens: cannot move settings from \(oldDirectory.path): \(error)")
-        }
+    static var directory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("Shift Happens", isDirectory: true)
     }
 
     static var fileURL: URL { directory.appendingPathComponent("config.json") }
 
     static func load() -> AppConfig {
-        migrateIfNeeded()
         guard let data = try? Data(contentsOf: fileURL) else { return AppConfig() }
         do {
             return try JSONDecoder().decode(AppConfig.self, from: data).sanitized()
