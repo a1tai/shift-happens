@@ -18,6 +18,8 @@ enum DebugSnapshot {
     static var showsOnboarding: Bool { env["KB_ONBOARDING"] == "1" }
     /// While rendering snapshots the app must not ask for permissions or open System Settings.
     static var isActive: Bool { env["KB_SNAPSHOT"] != nil }
+    /// The self-test must not switch macOS's own shortcuts off, not even for a moment.
+    static var isSelfTest: Bool { env["KB_SELFTEST"] == "1" }
     /// KB_NO_BANNER=1 hides the permission banners, to check layouts as they look once permissions are granted.
     static var hidesBanners: Bool { env["KB_NO_BANNER"] == "1" }
 
@@ -259,6 +261,27 @@ enum DebugSnapshot {
         MacroPlayer.run([down(0x38), .delay(10), down(0x00), up(0x00)], stepDelay: 0, poster: cancelled) { calls += 1; return calls > 2 }
         check("cancelled macro releases held keys", cancelled.log == ["⇧56↓", "wait:10", "56↑"], "\(cancelled.log)")
 
+        // Duplicate reports are dropped, but a key released while nobody listened can be pressed again.
+        var filter = KeyStateFilter()
+        check("first press accepted", filter.accept("kb/7/21", pressed: true))
+        check("second interface's copy dropped", !filter.accept("kb/7/21", pressed: true))
+        check("release accepted", filter.accept("kb/7/21", pressed: false))
+        check("next press accepted again", filter.accept("kb/7/21", pressed: true))
+
+        // The key that ends a recording (Esc, or the recorded key) must not act on the window afterwards.
+        func keyDown(_ code: UInt16, _ chars: String) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                             context: nil, characters: chars, charactersIgnoringModifiers: chars,
+                             isARepeat: false, keyCode: code)!
+        }
+        let app = AppState.shared
+        let recorder = UUID()
+        app.startRecording(recorder)
+        check("keys are swallowed while recording", app.handle(localEvent: keyDown(0x24, "\r")) == nil)
+        app.stopRecording(recorder) // as when Esc or the recorded key ends it
+        check("Esc after a recording does not reach the window", app.handle(localEvent: keyDown(0x35, "\u{1b}")) == nil)
+        check("later keys reach the window again", app.handle(localEvent: keyDown(0x24, "\r")) != nil)
+
         // Config files from before the layout fixer still load.
         let old = #"{"enabled":true,"remaps":[],"combos":[],"knownDevices":[]}"#
         let decoded = try? JSONDecoder().decode(AppConfig.self, from: Data(old.utf8))
@@ -286,6 +309,7 @@ enum DebugSnapshot {
     static var opensMacroEditor: Bool { false }
     static var showsOnboarding: Bool { false }
     static var isActive: Bool { false }
+    static var isSelfTest: Bool { false }
     static var assumesRequested: Bool { false }
     static var hidesBanners: Bool { false }
     static func recordKeyboardFit(drawn: CGSize, available: CGSize) {}

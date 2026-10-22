@@ -66,6 +66,9 @@ final class AppState: NSObject, ObservableObject {
     /// Starting another recorder stops this one first.
     @Published private(set) var activeRecorder: UUID?
     private var endActiveRecorder: (() -> Void)?
+    /// When the last recording ended. The key press that ended it (the recorded key, or Esc) reaches the
+    /// window a moment after the raw input, and must not act there (Esc would close the sheet, Return save it).
+    private var recordingEndedAt: Date?
     /// When > 0 the app's own window swallows key presses (monitor tab, recorders) so they don't beep or act.
     var swallowLocalKeys = 0
 
@@ -356,7 +359,7 @@ final class AppState: NSObject, ObservableObject {
         endActiveRecorder = onEnd
         swallowLocalKeys += 1
         combos.isPaused = true
-        SystemShortcuts.disable()
+        if !DebugSnapshot.isSelfTest { SystemShortcuts.disable() }
     }
 
     func stopRecording(_ id: UUID) {
@@ -368,6 +371,7 @@ final class AppState: NSObject, ObservableObject {
         swallowLocalKeys -= 1
         combos.isPaused = false
         SystemShortcuts.restore()
+        recordingEndedAt = Date()
         let end = endActiveRecorder
         endActiveRecorder = nil
         end?()
@@ -451,7 +455,12 @@ final class AppState: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.objectWillChange.send() }
     }
 
-    private func handle(localEvent event: NSEvent) -> NSEvent? {
+    func handle(localEvent event: NSEvent) -> NSEvent? {
+        if activeRecorder == nil, event.type == .keyDown, let ended = recordingEndedAt,
+           Date().timeIntervalSince(ended) < 0.5 {
+            recordingEndedAt = nil
+            return nil
+        }
         if activeRecorder != nil {
             // Without Input Monitoring the shortcut recorder only has the key presses that reach this window.
             if event.type == .keyDown, !inputMonitoringGranted, let handler = chordCaptureHandler {

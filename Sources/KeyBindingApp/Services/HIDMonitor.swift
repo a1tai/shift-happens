@@ -21,9 +21,7 @@ final class HIDMonitor {
     var onDevicesChanged: (([DeviceRef]) -> Void)?
 
     private(set) var devices: [DeviceRef] = []
-    /// Last state of each key per device. Some keyboards (the MacBook's own) show up as two HID devices
-    /// and report every press twice; a press of a key that is already down is dropped.
-    private var keyStates: [String: Bool] = [:]
+    private var keyStates = KeyStateFilter()
     private var manager: IOHIDManager?
 
     var isRunning: Bool { manager != nil }
@@ -83,7 +81,6 @@ final class HIDMonitor {
     }
 
     private func handle(value: IOHIDValue) {
-        guard isListening() else { return }
         let element = IOHIDValueGetElement(value)
         let page = IOHIDElementGetUsagePage(element)
         let usage = IOHIDElementGetUsage(element)
@@ -101,9 +98,10 @@ final class HIDMonitor {
         guard raw == 0 || raw == 1 else { return }
         let pressed = raw == 1
         let device = Self.deviceRef(IOHIDElementGetDevice(element))
-        let stateKey = "\(device.id)/\(page)/\(usage)"
-        guard keyStates[stateKey] != pressed else { return }
-        keyStates[stateKey] = pressed
+        // Up/down state is kept even when nobody listens (only which keys are down right now, no history):
+        // otherwise a key released while not listening would still count as down, and its next press be lost.
+        guard keyStates.accept("\(device.id)/\(page)/\(usage)", pressed: pressed) else { return }
+        guard isListening() else { return }
         onKey?(HIDKeyEvent(usage: HIDUsage(page: page, usage: usage), isDown: pressed, device: device, time: Date()))
     }
 
@@ -156,5 +154,16 @@ final class HIDMonitor {
     @discardableResult
     static func requestAccess() -> Bool {
         IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+    }
+}
+
+/// Drops repeated reports of the same key state. Some keyboards (the MacBook's own) show up as two HID
+/// devices and report every press twice; a "down" for a key that is already down is not a new press.
+/// It must see every event, listened to or not, or a missed release would swallow the next press.
+struct KeyStateFilter {
+    private var down: Set<String> = []
+
+    mutating func accept(_ key: String, pressed: Bool) -> Bool {
+        pressed ? down.insert(key).inserted : down.remove(key) != nil
     }
 }
