@@ -16,7 +16,7 @@ jobs:
         run: swift build
       - name: Self-test
         # The debug build checks key conversion, recording, macros, config limits and more, then exits.
-        run: KB_SELFTEST=1 .build/debug/KeyBindingApp
+        run: KB_SELFTEST=1 .build/debug/ShiftHappens
       - name: Build app
         run: ./scripts/build-app.sh
       - uses: actions/upload-artifact@v4

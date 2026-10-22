@@ -2,8 +2,8 @@
 
 ## Perekluk
 
-The layout fixer (`Sources/KeyBindingApp/Services/LayoutFixer.swift` and
-`Sources/KeyBindingApp/Services/InputSources.swift`) is adapted from
+The layout fixer (`Sources/ShiftHappens/Services/LayoutFixer.swift` and
+`Sources/ShiftHappens/Services/InputSources.swift`) is adapted from
 [Perekluk](https://github.com/abaskalov/perekluk).
 
 ```

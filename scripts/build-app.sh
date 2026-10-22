@@ -11,8 +11,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-# The executable keeps the package name; only the bundle carries the display name.
-EXECUTABLE="KeyBindingApp"
+EXECUTABLE="ShiftHappens"
 APP_NAME="Shift Happens"
 APP="build/$APP_NAME.app"
 
@@ -28,6 +27,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$EXECUTABLE" "$APP/Contents/MacOS/$EXECUTABLE"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# Releases pass the tag's version (VERSION=1.2.3), so the app and the release always agree.
+if [ -n "${VERSION:-}" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+fi
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 if [ -z "${SIGN_IDENTITY:-}" ] && [ -f .signing-identity ]; then

@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "KeyBindingApp",
+    name: "ShiftHappens",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "KeyBindingApp",
-            path: "Sources/KeyBindingApp",
+            name: "ShiftHappens",
+            path: "Sources/ShiftHappens",
             linkerSettings: [
                 .linkedFramework("IOKit"),
                 .linkedFramework("ApplicationServices"),

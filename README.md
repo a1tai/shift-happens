@@ -7,7 +7,11 @@ It shows what every key really sends, remaps keys, turns shortcuts (or mouse but
 shortcuts or whole macros, and fixes text typed in the wrong keyboard layout. Everything is set up in
 a regular macOS window and lives in the menu bar afterwards.
 
-<!-- Screenshots: keyboard screen, combo/macro editor, layout fixer. -->
+![Keyboard screen](docs/screenshots/keyboard.png)
+
+| Combo editor | Macro editor |
+|---|---|
+| ![Combo that opens an app](docs/screenshots/combo-app.png) | ![Macro steps](docs/screenshots/combo-macro.png) |
 
 ## Features
 
@@ -29,19 +33,23 @@ a regular macOS window and lives in the menu bar afterwards.
   layout. Works with three or more layouts. Adapted from [Perekluk](https://github.com/abaskalov/perekluk).
 - **Input language in the menu bar** — EN / RU next to the app's icon, with a menu to switch layouts and
   open Emoji & Symbols, so macOS's own input menu can be hidden.
-- **Presets** for Windows keyboards (swap Win/Alt, Print Screen, Home/End, Ctrl shortcuts) and for mouse
-  Back/Forward.
+- **Presets** for Windows keyboards (swap Win/Alt for one keyboard or all, Print Screen, Home/End, Ctrl
+  shortcuts) and for mouse Back/Forward.
 - **Active / Paused** — one switch (sidebar or menu bar) pauses everything at once.
 - Launch at login, settings export and import.
 
 ## Install
 
-Download `Shift Happens.zip` from [Releases](https://github.com/a1tai/shift-happens/releases), unzip it and move **Shift Happens** to
-Applications.
+Download `Shift-Happens.zip` from [Releases](https://github.com/a1tai/shift-happens/releases), unzip it and move
+**Shift Happens** to Applications.
 
 The release build is not notarized, so macOS warns on first open. Open it anyway with right-click → Open,
 or in System Settings → Privacy & Security → **Open Anyway**, or with
 `xattr -dr com.apple.quarantine "/Applications/Shift Happens.app"`.
+
+The release build is signed ad hoc, so after installing a new version macOS may ask for Input Monitoring and
+Accessibility again: remove the old Shift Happens entries in System Settings → Privacy & Security and allow
+the new one.
 
 Requires macOS 13 or later.
 
@@ -86,8 +94,8 @@ your permissions across rebuilds, sign with a certificate from your keychain (a 
 certificate works): `SIGN_IDENTITY="Apple Development: you@example.com" ./scripts/build-app.sh`, or put the
 identity's name in a git-ignored `.signing-identity` file.
 
-Debug builds have a self-test (`swift build && KB_SELFTEST=1 .build/debug/KeyBindingApp`) and can render
-any screen to PNG (`KB_SNAPSHOT=out.png KB_SCREEN=combos .build/debug/KeyBindingApp`). The icon is drawn by
+Debug builds have a self-test (`swift build && KB_SELFTEST=1 .build/debug/ShiftHappens`) and can render
+any screen to PNG (`KB_SNAPSHOT=out.png KB_SCREEN=combos .build/debug/ShiftHappens`). The icon is drawn by
 `swift scripts/make-icon.swift`.
 
 ## Uninstall

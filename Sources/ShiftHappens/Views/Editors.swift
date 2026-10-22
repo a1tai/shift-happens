@@ -190,7 +190,7 @@ struct ComboEditor: View {
                     })
             }
 
-            if !state.accessibilityGranted {
+            if !state.accessibilityGranted && !DebugSnapshot.hidesBanners {
                 Label("Combos start working once Accessibility is allowed.", systemImage: "lock")
                     .foregroundStyle(.orange)
             }

@@ -332,6 +332,7 @@ final class AppState: NSObject, ObservableObject {
     /// another bundle id; copy what isn't set yet.
     private static func migrateDefaults() {
         let defaults = UserDefaults.standard
+        // The app's bundle id before it was published; kept only to move old preferences over.
         guard let old = defaults.persistentDomain(forName: "com.keybindingapp.KeyBindingApp") else { return }
         for (key, value) in old where defaults.object(forKey: key) == nil && !key.hasPrefix("NS") {
             defaults.set(value, forKey: key)
