@@ -257,6 +257,17 @@ final class AppState: NSObject, ObservableObject {
         inputSources.first { $0.id == currentInputSourceID }?.shortLabel
     }
 
+    /// Opens Emoji & Symbols in the app in front by sending its shortcut, ⌃⌘Space. Selecting the
+    /// Character Palette input source only works from the system's own input menu, and the AppKit panel
+    /// call needs a text field in this app. Sent after the menu has closed, so the shortcut reaches the
+    /// app that was in front.
+    func showEmojiAndSymbols() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            CGEventPoster().key(0x31, down: true, modifiers: [.control, .command])
+            CGEventPoster().key(0x31, down: false, modifiers: [.control, .command])
+        }
+    }
+
     func selectInputSource(_ id: String) {
         layoutFixer.sources.select(id)
     }

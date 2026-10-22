@@ -24,6 +24,8 @@ struct KeyBindingApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let showWindowNotification = Notification.Name("com.keybindingapp.showWindow")
+    /// Same as the menu item; lets the Emoji & Symbols action be checked without clicking the menu.
+    static let showEmojiNotification = Notification.Name("com.keybindingapp.showEmojiAndSymbols")
 
     /// NSApp.delegate is SwiftUI's wrapper, so views reach this object through here.
     static private(set) weak var shared: AppDelegate?
@@ -50,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         DebugSnapshot.runSelfTestIfRequested()
         Self.shared = self
+        DistributedNotificationCenter.default().addObserver(
+            forName: Self.showEmojiNotification, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in AppState.shared.showEmojiAndSymbols() }
+        }
         DistributedNotificationCenter.default().addObserver(
             forName: Self.showWindowNotification, object: nil, queue: .main
         ) { _ in
