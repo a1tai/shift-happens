@@ -24,6 +24,10 @@ enum DebugSnapshot {
     private static var lastKeyboardFit: (drawn: CGSize, available: CGSize)?
     static func recordKeyboardFit(drawn: CGSize, available: CGSize) { lastKeyboardFit = (drawn, available) }
 
+    private static var recorded: [(String, CGFloat)] = []
+    /// Notes a measured value for the snapshot report.
+    static func record(_ name: String, _ value: CGFloat) { recorded.append((name, value)) }
+
     /// KB_REQUESTED=1 renders permissions as if macOS had asked before (the "Reset and Ask Again" state).
     static var assumesRequested: Bool { env["KB_REQUESTED"] == "1" }
 
@@ -52,6 +56,7 @@ enum DebugSnapshot {
                 $0.convert($0.bounds, to: nil).minX > sidebarEdge && !$0.isHidden && $0.frame.width > 0
             }
             print("SCROLL VIEWS IN DETAIL: \(detailScrollers.count)")
+            for (name, value) in recorded { print("MEASURED \(name): \(Int(value))") }
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
             exit(0)
         }
@@ -278,6 +283,7 @@ enum DebugSnapshot {
     static var assumesRequested: Bool { false }
     static var hidesBanners: Bool { false }
     static func recordKeyboardFit(drawn: CGSize, available: CGSize) {}
+    static func record(_ name: String, _ value: CGFloat) {}
     static func runIfRequested(window: NSWindow) {}
     static func runSelfTestIfRequested() {}
     #endif

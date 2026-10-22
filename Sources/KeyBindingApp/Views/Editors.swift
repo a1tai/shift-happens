@@ -102,6 +102,14 @@ struct ComboEditor: View {
         isNew = !AppState.shared.config.combos.contains { $0.id == combo.id }
     }
 
+    /// A sheet sizes itself to its content, so the macro sheet gets an explicit height: most of the
+    /// main window's, but never so little that the step list gets cramped, nor taller than the screen.
+    private static var macroSheetHeight: CGFloat {
+        let window = AppDelegate.shared?.mainWindowHeight ?? 720
+        let screen = (NSScreen.main?.visibleFrame.height ?? 900) - 60
+        return min(screen, max(640, window * 0.85))
+    }
+
     private var canSave: Bool {
         sendsMacro ? draft.isMacro : draft.trigger != draft.output
     }
@@ -109,51 +117,53 @@ struct ComboEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(isNew ? "New Combo" : "Combo").font(.title2.bold())
-            Text(sendsMacro
-                 ? "When you press the shortcut, the app plays the steps below: keys, pauses and text."
-                 : "When you press the first combination, the app sends the second one instead. For example Insert → ⌘V or ⌃C → ⌘C.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if !sendsMacro {
+                Text("When you press the first combination, the app sends the second one instead. For example Insert → ⌘V or ⌃C → ⌘C.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            Form {
-                Section("When pressed") { ChordEditor(chord: $draft.trigger) }
-                Section {
-                    Picker("Send", selection: $sendsMacro) {
-                        Text("Shortcut").tag(false)
-                        Text("Macro").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    if sendsMacro {
-                        HStack {
-                            Text("Pause between steps")
-                            Spacer()
-                            TextField("", value: $draft.stepDelay, format: .number)
-                                .frame(width: 60)
-                                .multilineTextAlignment(.trailing)
-                            Text("ms").foregroundStyle(.secondary)
-                            Picker("", selection: $draft.repeatsWhileHeld) {
-                                Text("Run once").tag(false)
-                                Text("Repeat while held").tag(true)
-                            }
-                            .labelsHidden()
-                            .fixedSize()
+            // Compact rows instead of form groups, so the macro steps get the room.
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
+                GridRow {
+                    Text("When pressed").gridColumnAlignment(.trailing)
+                    ChordEditor(chord: $draft.trigger)
+                }
+                GridRow {
+                    Text("Send")
+                    HStack {
+                        Picker("Send", selection: $sendsMacro) {
+                            Text("Shortcut").tag(false)
+                            Text("Macro").tag(true)
                         }
-                    } else {
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        Spacer()
+                    }
+                }
+                if !sendsMacro {
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
                         ChordEditor(chord: $draft.output)
                     }
                 }
-                Section {
-                    TextField("Note", text: $draft.note, prompt: Text("for example “Paste”"))
-                    Toggle("Enabled", isOn: $draft.enabled)
+                GridRow {
+                    Text("Note")
+                    HStack(spacing: 14) {
+                        TextField("Note", text: $draft.note, prompt: Text("for example “Paste”"))
+                            .labelsHidden()
+                        Toggle("Enabled", isOn: $draft.enabled)
+                    }
                 }
             }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            .fixedSize(horizontal: false, vertical: true)
 
             if sendsMacro {
                 MacroEditor(combo: $draft)
                     .frame(maxHeight: .infinity)
+                    .background(GeometryReader { proxy in
+                        Color.clear.onAppear { DebugSnapshot.record("macro steps area height", proxy.size.height) }
+                    })
             }
 
             if !state.accessibilityGranted {
@@ -182,13 +192,8 @@ struct ComboEditor: View {
             }
         }
         .padding(24)
-        // The macro editor is resizable; its step list takes the extra height.
-        .frame(minWidth: sendsMacro ? 720 : 560, idealWidth: sendsMacro ? 820 : 560, maxWidth: sendsMacro ? .infinity : 560,
-               minHeight: sendsMacro ? 560 : nil, idealHeight: sendsMacro ? 780 : nil, maxHeight: sendsMacro ? .infinity : nil)
-        .onChange(of: sendsMacro) { macro in
-            // Start a new macro from the shortcut that was set up so far.
-            if macro && draft.macro.isEmpty { draft.macro = [MacroItem(step: .press(draft.output))] }
-        }
+        .frame(width: sendsMacro ? 780 : 560, height: sendsMacro ? Self.macroSheetHeight : nil)
+
     }
 }
 

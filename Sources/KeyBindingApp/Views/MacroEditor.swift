@@ -52,6 +52,8 @@ struct MacroEditor: View {
             }
             Divider()
             toolbar
+            Divider()
+            footer
         }
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -118,13 +120,34 @@ struct MacroEditor: View {
                 .help("Add the pauses between your key presses as delay steps")
 
             Spacer()
+        }
+        .font(.callout)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+    }
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            Text("Pause between steps")
+            TextField("", value: $combo.stepDelay, format: .number)
+                .frame(width: 50)
+                .multilineTextAlignment(.trailing)
+            Text("ms").foregroundStyle(.secondary)
+            Picker("", selection: $combo.repeatsWhileHeld) {
+                Text("Run once").tag(false)
+                Text("Repeat while held").tag(true)
+            }
+            .labelsHidden()
+            .fixedSize()
+            .help("Holding the trigger key plays the macro once, or again and again")
+            Spacer()
             Text(counted(combo.macro.count, "step") + " · \(combo.macro.duration(stepDelay: combo.stepDelay)) ms")
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
         .font(.callout)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
     }
 
     private func toolButton(_ icon: String, help: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {

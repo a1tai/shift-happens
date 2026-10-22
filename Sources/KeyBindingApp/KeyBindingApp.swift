@@ -69,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    var mainWindowHeight: CGFloat? { window?.frame.height }
+
     func showMainWindow() {
         if window == nil {
             let window = NSWindow(
