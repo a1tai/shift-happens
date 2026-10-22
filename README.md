@@ -15,7 +15,8 @@ a regular macOS window and lives in the menu bar afterwards.
   Remapped keys are blue and show their new value, keys with combos are purple, keys you press light up.
   Click a key to remap it.
 - **Key Monitor** — the last key press: the HID code the keyboard sent, the macOS key code, the character
-  and the keyboard. If macOS ignores a key, you see it here.
+  and the keyboard. If macOS ignores a key, you see it here. A special key that sends a whole shortcut
+  (Win+Shift+S, Ctrl+Alt+X) shows as one press: the full chord and every HID event in order.
 - **Remaps** (key → key) through the system's `hidutil`, for every keyboard or just one (so the MacBook's
   own keyboard can stay as it is).
 - **Combos** — a key, a shortcut or an extra mouse button (middle, back, forward) sends another shortcut,

@@ -34,6 +34,8 @@ final class HIDMonitor {
             [kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop, kIOHIDDeviceUsageKey: kHIDUsage_GD_Keyboard],
             [kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop, kIOHIDDeviceUsageKey: kHIDUsage_GD_Keypad],
             [kIOHIDDeviceUsagePageKey: kHIDPage_Consumer, kIOHIDDeviceUsageKey: kHIDUsage_Csmr_ConsumerControl],
+            // Sleep / power keys; wireless dongles often put these on their own interface.
+            [kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop, kIOHIDDeviceUsageKey: kHIDUsage_GD_SystemControl],
         ]
         IOHIDManagerSetDeviceMatchingMultiple(manager, matching as CFArray)
 
@@ -90,6 +92,13 @@ final class HIDMonitor {
             guard usage >= 0x04, usage <= 0xE7 else { return }
         case HIDPage.consumer, HIDPage.appleVendorTopCase:
             guard usage > 0 else { return }
+        case HIDPage.genericDesktop:
+            // System control: power, sleep, wake, and the like (0x81…0xB7). Not pointer movement.
+            guard usage >= 0x81, usage <= 0xB7 else { return }
+        case HIDPage.vendorFirst...HIDPage.vendorLast:
+            // Vendor-defined buttons, which some keyboards use for their special keys. Only on-off buttons,
+            // not the vendor's other data.
+            guard usage > 0, IOHIDElementGetType(element) == kIOHIDElementTypeInput_Button else { return }
         default:
             return
         }

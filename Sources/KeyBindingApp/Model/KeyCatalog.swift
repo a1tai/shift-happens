@@ -5,6 +5,15 @@ enum HIDPage {
     static let keyboard: UInt32 = 0x07
     static let consumer: UInt32 = 0x0C
     static let appleVendorTopCase: UInt32 = 0xFF
+    static let genericDesktop: UInt32 = 0x01
+    /// Vendor-defined pages.
+    static let vendorFirst: UInt32 = 0xFF00
+    static let vendorLast: UInt32 = 0xFFFF
+
+    /// Pages whose keys can be remapped, recorded and drawn. The Key Monitor also shows the others.
+    static func isKeyPage(_ page: UInt32) -> Bool {
+        page == keyboard || page == consumer || page == appleVendorTopCase
+    }
 }
 
 /// One key from the HID tables, with how macOS sees it (virtual key code), when it does.

@@ -5,7 +5,8 @@
 First public version.
 
 - Keyboard screen with a drawn Mac or Windows keyboard showing remaps, combos and pressed keys.
-- Key Monitor: the last key press with its HID code, macOS key code, character and keyboard. No history.
+- Key Monitor: the last key press with its HID code, macOS key code, character and keyboard; a special key that sends
+  several keys shows as one press with the full chord. No history.
 - Remaps (key → key) through `hidutil`, for every keyboard or one keyboard; restored after restart.
 - Combos: a key, shortcut or extra mouse button sends another shortcut or plays a macro
   (key down/up events, delays, typed text), recorded from the keyboard or edited by hand.

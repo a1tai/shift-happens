@@ -349,6 +349,63 @@ enum DebugSnapshot {
         let roundTrip = (try? ConfigStore.encode(config)).flatMap { try? JSONDecoder().decode(AppConfig.self, from: $0) }
         check("layout fixer settings round-trip", roundTrip == config)
 
+        // Key Monitor: one physical press that the keyboard sends as several keys is one gesture.
+        let dev = DeviceRef(vendorID: 0x3F0, productID: 0x6841, name: "Test keyboard")
+        let g0 = Date()
+        func ev(_ page: UInt32, _ usage: UInt32, _ down: Bool, _ ms: Double) -> KeyGesture.Event {
+            KeyGesture.Event(usage: HIDUsage(page: page, usage: usage), isDown: down, device: dev, time: g0.addingTimeInterval(ms / 1000))
+        }
+        func feed(_ events: [KeyGesture.Event], into start: KeyGesture? = nil) -> [KeyGesture] {
+            var current = start, all: [KeyGesture] = []
+            for e in events {
+                let next = KeyGesture.adding(e, to: current)
+                if let next, next.id != current?.id { all.append(next) } else if let next { all[all.count - 1] = next }
+                current = next
+            }
+            return all
+        }
+        let kb = HIDPage.keyboard
+        // Win+Shift+S from one key, all down then all up.
+        var gs = feed([ev(kb, 0xE3, true, 0), ev(kb, 0xE1, true, 1), ev(kb, 0x16, true, 2),
+                       ev(kb, 0x16, false, 30), ev(kb, 0xE1, false, 31), ev(kb, 0xE3, false, 32)])
+        check("chord key is one gesture", gs.count == 1 && gs[0].events.count == 6, "\(gs.map(\.events.count))")
+        check("chord shown in press order", gs.first?.chordDisplay == "⌘ + ⇧ + S", gs.first?.chordDisplay ?? "nil")
+        check("chord as shortcut", gs.first?.chord == KeyChord(keyCode: 1, modifiers: [.command, .shift]), "\(String(describing: gs.first?.chord))")
+        check("gesture ends when all keys are up", gs.first?.isHeld == false)
+        // Modifier released before the key goes down, within the grace period: still one press.
+        gs = feed([ev(kb, 0xE0, true, 0), ev(kb, 0xE2, true, 0), ev(kb, 0xE0, false, 5), ev(kb, 0xE2, false, 5),
+                   ev(kb, 0x1B, true, 60), ev(kb, 0x1B, false, 70)])
+        check("key within grace joins the press", gs.count == 1 && gs.first?.chordDisplay == "⌃ + ⌥ + X", "\(gs.map(\.chordDisplay))")
+        // Two separate presses.
+        gs = feed([ev(kb, 0x04, true, 0), ev(kb, 0x04, false, 50), ev(kb, 0x05, true, 400), ev(kb, 0x05, false, 450)])
+        check("separate presses are separate gestures", gs.count == 2 && gs.last?.chordDisplay == "B", "\(gs.map(\.chordDisplay))")
+        // Consumer and vendor usages from a second interface of the same keyboard.
+        gs = feed([ev(HIDPage.consumer, 0x192, true, 0), ev(kb, 0xE3, true, 3), ev(HIDPage.consumer, 0x192, false, 20), ev(kb, 0xE3, false, 22)])
+        check("consumer + keyboard usages are one gesture", gs.count == 1 && gs.first?.keys.count == 2, "\(gs.map(\.chordDisplay))")
+        gs = feed([ev(0xFF05, 0x01, true, 0), ev(0xFF05, 0x01, false, 10)])
+        check("vendor usage is shown", gs.count == 1 && gs.first?.chordDisplay == "HID 0xFF05/0x01", gs.first?.chordDisplay ?? "nil")
+        // A stray release starts nothing; repeated downs are not new keys.
+        check("stray release ignored", feed([ev(kb, 0x04, false, 0)]).isEmpty)
+        gs = feed([ev(kb, 0x04, true, 0), ev(kb, 0x04, true, 1), ev(kb, 0x04, false, 2)])
+        check("duplicate down ignored", gs.first?.events.count == 2)
+        // Holding a modifier while typing doesn't grow without bound.
+        var long: [KeyGesture.Event] = [ev(kb, 0xE1, true, 0)]
+        for i in 0..<40 { long += [ev(kb, 0x04 + UInt32(i % 26), true, Double(i * 10 + 1)), ev(kb, 0x04 + UInt32(i % 26), false, Double(i * 10 + 5))] }
+        gs = feed(long)
+        check("gesture is capped", gs.count == 1 && gs[0].events.count == KeyGesture.maxEvents && gs[0].keys.count == KeyGesture.maxKeys)
+        // What macOS produced is attached; macOS's own view wins for the shortcut.
+        var g = feed([ev(kb, 0xE3, true, 0), ev(kb, 0x16, true, 1)])[0]
+        g.addMac(keyCode: 0x37, characters: nil, modifiers: [.command], isModifierChange: true)
+        g.addMac(keyCode: 1, characters: "s", modifiers: [.command], isModifierChange: false)
+        check("macOS output attached", g.macKeys.count == 1 && g.macSawModifiers && g.chord == KeyChord(keyCode: 1, modifiers: [.command]))
+        // The shortcut recorder takes the full chord from such a key.
+        var gestureTracker = ChordTracker()
+        var recorded: KeyChord?
+        for (u, d) in [(0xE3 as UInt32, true), (0xE1, true), (0x16, true)] {
+            if let c = gestureTracker.handle(HIDUsage(page: kb, usage: u), isDown: d) { recorded = c }
+        }
+        check("recorder captures the full chord", recorded == KeyChord(keyCode: 1, modifiers: [.command, .shift]), "\(String(describing: recorded))")
+
         let summary = [failures].map { $0 == 0 ? "ALL PASSED" : "\($0) FAILED" }[0]
         print(summary)
         exit(Int32(min(failures, 1)))

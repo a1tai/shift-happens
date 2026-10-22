@@ -3,19 +3,6 @@ import Carbon
 import Combine
 import Foundation
 
-/// The key monitor's last press: what the keyboard sent and what macOS made of it.
-struct KeyLogEntry: Identifiable, Equatable {
-    let id = UUID()
-    var hid: HIDKeyEvent?
-    var macKeyCode: UInt16?
-    var characters: String?
-    var macModifiers: ModifierSet = []
-    let time: Date
-
-    /// True when the keyboard sent the key but no macOS key event followed.
-    var macIgnoredIt: Bool { hid != nil && macKeyCode == nil && Date().timeIntervalSince(time) > 0.4 }
-}
-
 /// The app's single source of truth: saved config, live keyboard state and the engines.
 final class AppState: NSObject, ObservableObject {
     static let shared = AppState()
@@ -29,8 +16,9 @@ final class AppState: NSObject, ObservableObject {
     }
 
     @Published private(set) var devices: [DeviceRef] = []
-    /// The last key press, for the Key Monitor. Only one, memory only, and only while that screen is looked at.
-    @Published private(set) var lastKey: KeyLogEntry?
+    /// The current or last key press, for the Key Monitor: everything one physical press sent.
+    /// Only one, memory only, and only while that screen is looked at.
+    @Published private(set) var lastGesture: KeyGesture?
     /// Keys held down right now, for the Keyboard screen. Only tracked while it is being looked at.
     @Published private(set) var pressedKeys: Set<UInt64> = []
     @Published private(set) var inputMonitoringGranted = HIDMonitor.hasAccess
@@ -390,7 +378,7 @@ final class AppState: NSObject, ObservableObject {
 
     /// Drops everything about key presses as soon as nobody can see it.
     private func forgetKeysNoLongerViewed() {
-        if !isMonitorViewed && lastKey != nil { lastKey = nil }
+        if !isMonitorViewed && lastGesture != nil { lastGesture = nil }
         if !isKeyboardViewed && !pressedKeys.isEmpty { pressedKeys.removeAll() }
     }
 
@@ -400,7 +388,9 @@ final class AppState: NSObject, ObservableObject {
     private func handle(hidEvent: HIDKeyEvent) {
         if hidEvent.usage == KeyCatalog.fn { layoutFixer.handleFnFromHID(isDown: hidEvent.isDown) }
         if let handler = macroCaptureHandler {
-            handler(remapped(hidEvent.usage, from: hidEvent.device), hidEvent.isDown, hidEvent.time)
+            if HIDPage.isKeyPage(hidEvent.usage.page) {
+                handler(remapped(hidEvent.usage, from: hidEvent.device), hidEvent.isDown, hidEvent.time)
+            }
             return
         }
         if let handler = chordCaptureHandler {
@@ -415,6 +405,17 @@ final class AppState: NSObject, ObservableObject {
             }
             return
         }
+        if isMonitorViewed {
+            let event = KeyGesture.Event(usage: hidEvent.usage, isDown: hidEvent.isDown, device: hidEvent.device, time: hidEvent.time)
+            let gesture = KeyGesture.adding(event, to: lastGesture)
+            if gesture != lastGesture {
+                lastGesture = gesture
+                // Redraw once it is clear whether macOS produced a key event for this press.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.objectWillChange.send() }
+            }
+        }
+        // Vendor and system keys are only shown in the monitor; they can't be remapped or drawn.
+        guard HIDPage.isKeyPage(hidEvent.usage.page) else { return }
         let value = hidEvent.usage.hidutilValue
         if isKeyboardViewed {
             if hidEvent.isDown {
@@ -433,12 +434,7 @@ final class AppState: NSObject, ObservableObject {
         if let handler = captureHandler {
             captureHandler = nil
             handler(hidEvent)
-            return
         }
-        guard isMonitorViewed else { return }
-        lastKey = KeyLogEntry(hid: hidEvent, time: hidEvent.time)
-        // Redraw once it is clear whether macOS produced a key event for this press.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.objectWillChange.send() }
     }
 
     func handle(localEvent event: NSEvent) -> NSEvent? {
@@ -473,20 +469,19 @@ final class AppState: NSObject, ObservableObject {
         return event
     }
 
-    /// Adds what macOS made of a key press to the monitor's entry for it.
+    /// Adds what macOS made of a key press to the monitor's current press.
     private func updateLastKey(_ event: NSEvent) {
         let isModifier = event.type == .flagsChanged
         let modifiers = ModifierSet(nsFlags: event.modifierFlags)
-        // Attach what macOS produced to the raw press that just happened, if there is one.
-        if var entry = lastKey, entry.macKeyCode == nil, Date().timeIntervalSince(entry.time) < 0.4 {
-            entry.macKeyCode = event.keyCode
-            entry.characters = isModifier ? nil : event.characters
-            entry.macModifiers = modifiers
-            lastKey = entry
-        } else if !inputMonitoringGranted {
+        let characters = isModifier ? nil : event.characters
+        if var gesture = lastGesture, !gesture.events.isEmpty,
+           gesture.isHeld || Date().timeIntervalSince(gesture.releasedAt ?? .distantPast) < 0.4 {
+            // Attach it to the raw press that is happening or just happened.
+            gesture.addMac(keyCode: event.keyCode, characters: characters, modifiers: modifiers, isModifierChange: isModifier)
+            lastGesture = gesture
+        } else if !inputMonitoringGranted, !isModifier {
             // Without Input Monitoring this is the only source of information.
-            lastKey = KeyLogEntry(hid: nil, macKeyCode: event.keyCode, characters: isModifier ? nil : event.characters,
-                                  macModifiers: modifiers, time: Date())
+            lastGesture = KeyGesture(macKey: .init(keyCode: event.keyCode, characters: characters, modifiers: modifiers), time: Date())
         }
     }
 }
