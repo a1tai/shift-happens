@@ -10,6 +10,7 @@ First public version.
 - Remaps (key → key) through `hidutil`, for every keyboard or one keyboard; restored after restart.
 - Combos: a key, shortcut or extra mouse button sends another shortcut or plays a macro
   (key down/up events, delays, typed text), recorded from the keyboard or edited by hand.
+- Combos can open an app or bring it to the front; macros have an Open App step.
 - Layout Fixer (adapted from Perekluk): retypes the last word or the selection in the other layout.
 - Input language in the menu bar icon, layout switching and Emoji & Symbols from its menu.
 - Presets for Windows keyboards and for mouse Back/Forward in Safari and Finder.

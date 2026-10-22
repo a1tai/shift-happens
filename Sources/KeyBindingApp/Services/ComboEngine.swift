@@ -99,9 +99,12 @@ final class ComboEngine {
 
         // Swallow the trigger's key-up too, so no key or modifier ever gets stuck.
         swallowedKeyUps.insert(keyCode)
-        if binding.isMacro {
+        let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        if let app = binding.app {
+            // Once per press: holding the key must not toggle the app back and forth.
+            if !isRepeat { open(app) }
+        } else if binding.isMacro {
             // A held key repeats; a macro runs again only if asked to, and never twice at once.
-            let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
             if !isRepeat || binding.repeatsWhileHeld { macros.play(binding) }
         } else {
             // A full press of the output on every key-down, auto-repeat included.
@@ -122,7 +125,7 @@ final class ComboEngine {
             return Unmanaged.passUnretained(event)
         }
         swallowedMouseUps.insert(button)
-        if binding.isMacro { macros.play(binding) } else { post(binding.output) }
+        if let app = binding.app { open(app) } else if binding.isMacro { macros.play(binding) } else { post(binding.output) }
         return nil
     }
 
@@ -135,6 +138,11 @@ final class ComboEngine {
             if let mouseButton { return combo.trigger.mouseButton == mouseButton }
             return combo.trigger.mouseButton == nil && combo.trigger.keyCode == keyCode
         }
+    }
+
+    /// Outside the event tap's callback, so the tap never waits for the app to open.
+    private func open(_ app: AppTarget) {
+        DispatchQueue.main.async { AppLauncher.open(app) }
     }
 
     private func post(_ chord: KeyChord) {

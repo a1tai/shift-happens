@@ -187,8 +187,12 @@ struct ComboBinding: Codable, Hashable, Identifiable {
     var stepDelay = 0
     /// Holding the trigger plays the macro again and again; otherwise it plays once per press.
     var repeatsWhileHeld = false
+    /// Opened (or brought to the front) instead of sending anything, when set.
+    var app: AppTarget?
 
-    var isMacro: Bool { !macro.isEmpty }
+    /// What the combo does: an app comes first, then a macro, then the output shortcut.
+    var isApp: Bool { app != nil }
+    var isMacro: Bool { app == nil && !macro.isEmpty }
 
     /// Saved before fn was left out: a trigger, output or macro step that is the fn key. Such a combo can't work.
     var usesFn: Bool {
@@ -201,7 +205,10 @@ struct ComboBinding: Codable, Hashable, Identifiable {
         }
         return keys.contains { $0.mouseButton == nil && $0.keyCode == fn }
     }
-    var outputSummary: String { isMacro ? macro.summary : output.display }
+    var outputSummary: String {
+        if let app { return app.name }
+        return isMacro ? macro.summary : output.display
+    }
 
     init(trigger: KeyChord, output: KeyChord, note: String = "", enabled: Bool = true) {
         self.trigger = trigger
@@ -225,6 +232,7 @@ struct ComboBinding: Codable, Hashable, Identifiable {
         }
         stepDelay = try c.decodeIfPresent(Int.self, forKey: .stepDelay) ?? 0
         repeatsWhileHeld = try c.decodeIfPresent(Bool.self, forKey: .repeatsWhileHeld) ?? false
+        app = try c.decodeIfPresent(AppTarget.self, forKey: .app)
     }
 }
 
@@ -283,6 +291,10 @@ struct AppConfig: Codable, Equatable {
         config.combos = Array(combos.prefix(Limits.bindings)).compactMap { combo in
             var combo = combo
             guard combo.trigger.isValid, combo.output.isValid else { return nil }
+            if let app = combo.app {
+                guard let safe = app.sanitized() else { return nil }
+                combo.app = safe
+            }
             combo.note = String(combo.note.prefix(Limits.noteLength))
             combo.stepDelay = min(max(combo.stepDelay, 0), Limits.stepDelay)
             combo.macro = Array(combo.macro.prefix(Limits.macroSteps)).compactMap { item in
@@ -294,6 +306,9 @@ struct AppConfig: Codable, Equatable {
                     item.step = .delay(min(max(ms, 0), Limits.delay))
                 case .text(let text):
                     item.step = .text(String(text.prefix(Limits.textLength)))
+                case .openApp(let app):
+                    guard let safe = app.sanitized() else { return nil }
+                    item.step = .openApp(safe)
                 }
                 return item
             }

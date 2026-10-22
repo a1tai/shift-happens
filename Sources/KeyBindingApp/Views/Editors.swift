@@ -93,12 +93,16 @@ struct ComboEditor: View {
     @EnvironmentObject private var state: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var draft: ComboBinding
-    @State private var sendsMacro: Bool
+    @State private var kind: OutputKind
     private let isNew: Bool
+
+    private enum OutputKind { case shortcut, macro, app }
+    private var sendsMacro: Bool { kind == .macro }
 
     init(combo: ComboBinding) {
         _draft = State(initialValue: combo)
-        _sendsMacro = State(initialValue: combo.isMacro || DebugSnapshot.opensMacroEditor)
+        let kind: OutputKind = combo.isApp ? .app : combo.isMacro || DebugSnapshot.opensMacroEditor ? .macro : .shortcut
+        _kind = State(initialValue: kind)
         isNew = !AppState.shared.config.combos.contains { $0.id == combo.id }
     }
 
@@ -111,13 +115,17 @@ struct ComboEditor: View {
     }
 
     private var canSave: Bool {
-        sendsMacro ? draft.isMacro : draft.trigger != draft.output
+        switch kind {
+        case .shortcut: return draft.trigger != draft.output
+        case .macro: return !draft.macro.isEmpty
+        case .app: return draft.app != nil
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(isNew ? "New Combo" : "Combo").font(.title2.bold())
-            if !sendsMacro {
+            if kind == .shortcut {
                 Text("When you press the first combination, the app sends the second one instead. For example Insert → ⌘V or ⌃C → ⌘C.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -132,9 +140,10 @@ struct ComboEditor: View {
                 GridRow {
                     Text("Send")
                     HStack {
-                        Picker("Send", selection: $sendsMacro) {
-                            Text("Shortcut").tag(false)
-                            Text("Macro").tag(true)
+                        Picker("Send", selection: $kind) {
+                            Text("Shortcut").tag(OutputKind.shortcut)
+                            Text("Macro").tag(OutputKind.macro)
+                            Text("Open App").tag(OutputKind.app)
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
@@ -142,10 +151,23 @@ struct ComboEditor: View {
                         Spacer()
                     }
                 }
-                if !sendsMacro {
+                if kind == .shortcut {
                     GridRow {
                         Color.clear.frame(width: 1, height: 1)
                         ChordEditor(chord: $draft.output)
+                    }
+                }
+                if kind == .app {
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        VStack(alignment: .leading, spacing: 8) {
+                            AppPickerField(app: $draft.app)
+                            Toggle("If it is already in front, hide it", isOn: hidesBinding)
+                                .disabled(draft.app == nil)
+                            Text("Opens the app, or brings it to the front if it is running.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 GridRow {
@@ -182,7 +204,8 @@ struct ComboEditor: View {
                 Button("Cancel") { dismiss() }.cancelAction(!state.isEditingMacroField)
                 Button("Save") {
                     var combo = draft
-                    if !sendsMacro { combo.macro = [] }
+                    if kind != .macro { combo.macro = [] }
+                    if kind != .app { combo.app = nil }
                     state.save(combo)
                     dismiss()
                     if !state.accessibilityGranted { Permissions.request(.accessibility) }
@@ -194,6 +217,11 @@ struct ComboEditor: View {
         .padding(24)
         .frame(width: sendsMacro ? 780 : 560, height: sendsMacro ? Self.macroSheetHeight : nil)
 
+    }
+
+    private var hidesBinding: Binding<Bool> {
+        Binding(get: { draft.app?.hidesIfFrontmost ?? false },
+                set: { draft.app?.hidesIfFrontmost = $0 })
     }
 }
 

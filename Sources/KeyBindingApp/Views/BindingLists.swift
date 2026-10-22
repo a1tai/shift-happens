@@ -127,7 +127,12 @@ struct CombosScreen: View {
                     TableColumn("Send") { combo in
                         HStack {
                             Image(systemName: "arrow.right").foregroundStyle(.secondary)
-                            KeyBadge(text: combo.outputSummary, highlighted: combo.enabled)
+                            if let app = combo.app {
+                                AppLabel(app: app, iconSize: 16)
+                                    .opacity(combo.enabled ? 1 : 0.5)
+                            } else {
+                                KeyBadge(text: combo.outputSummary, highlighted: combo.enabled)
+                            }
                             if combo.isMacro {
                                 Text(counted(combo.macro.count, "step")).font(.caption).foregroundStyle(.secondary)
                             }
@@ -150,13 +155,18 @@ struct CombosScreen: View {
         .padding(24)
         .sheet(item: $editing) { ComboEditor(combo: $0) }
         .onAppear {
-            if DebugSnapshot.opensComboEditor || DebugSnapshot.opensMacroEditor {
+            if DebugSnapshot.opensComboEditor || DebugSnapshot.opensMacroEditor || DebugSnapshot.opensAppEditor {
                 var combo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []),
                                          output: KeyChord(keyCode: 0x15, modifiers: [.command, .shift]))
                 if DebugSnapshot.opensMacroEditor {
                     combo.macro = (MacroStep.events(for: KeyChord(keyCode: 0x08, modifiers: .command)) + [.delay(100)]
-                                   + MacroStep.events(for: KeyChord(keyCode: 0x09, modifiers: .command)) + [.text("Hello")])
+                                   + MacroStep.events(for: KeyChord(keyCode: 0x09, modifiers: .command)) + [.text("Hello")]
+                                   + (AppLauncher.target(for: URL(fileURLWithPath: "/System/Applications/Calculator.app")).map { [.openApp($0)] } ?? []))
                         .map { MacroItem(step: $0) }
+                }
+                if DebugSnapshot.opensAppEditor {
+                    combo.app = AppLauncher.target(for: URL(fileURLWithPath: "/System/Applications/Calculator.app"))
+                    combo.macro = [MacroItem(step: .openApp(combo.app!)), MacroItem(step: .text("2+2"))]
                 }
                 editing = combo
             }

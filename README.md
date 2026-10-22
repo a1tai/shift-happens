@@ -22,6 +22,8 @@ a regular macOS window and lives in the menu bar afterwards.
 - **Combos** — a key, a shortcut or an extra mouse button (middle, back, forward) sends another shortcut,
   or plays a **macro**: key down / key up events, delays and typed text, recorded from the keyboard or
   edited by hand. Example: `PrtSc → ⌘⇧4`, or `Mouse 4 → ⌘[` so the Back button works in Safari and Finder.
+  A combo can also **open an app** (or bring it to the front, and optionally hide it if it already is),
+  and a macro can open an app as one of its steps.
 - **Layout Fixer** — typed `ghbdtn` instead of `привет`? Press the trigger key on its own (either Option,
   left/right Option, fn 🌐 or Caps Lock) and the last word, or the selected text, is retyped in the right
   layout. Works with three or more layouts. Adapted from [Perekluk](https://github.com/abaskalov/perekluk).

@@ -12,6 +12,8 @@ enum MacroStep: Codable, Hashable {
     case delay(Int)
     /// Type text as it is, independent of the keyboard layout.
     case text(String)
+    /// Open or bring an app to the front, and wait until it is in front.
+    case openApp(AppTarget)
 
     var display: String {
         switch self {
@@ -20,6 +22,7 @@ enum MacroStep: Codable, Hashable {
         case .keyUp(let chord): return chord.display + "↑"
         case .delay(let ms): return "\(ms) ms"
         case .text(let text): return "“\(text)”"
+        case .openApp(let app): return "Open \(app.name)"
         }
     }
 

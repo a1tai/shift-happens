@@ -14,6 +14,8 @@ enum DebugSnapshot {
     static var opensComboEditor: Bool { env["KB_EDIT"] == "combo" }
     /// KB_EDIT=macro on the Combos screen opens the combo editor with a sample macro.
     static var opensMacroEditor: Bool { env["KB_EDIT"] == "macro" }
+    /// KB_EDIT=app on the Combos screen opens the combo editor with an Open App output.
+    static var opensAppEditor: Bool { env["KB_EDIT"] == "app" }
     /// KB_ONBOARDING=1 shows the welcome sheet as on a first launch.
     static var showsOnboarding: Bool { env["KB_ONBOARDING"] == "1" }
     /// While rendering snapshots the app must not ask for permissions or open System Settings.
@@ -63,6 +65,26 @@ enum DebugSnapshot {
             exit(0)
         }
     }
+    /// KB_APPTEST=1: opens Calculator the way an Open App combo does, checks it runs and is in front, then quits
+    /// it again. Only for checking by hand; touches no saved combo.
+    static func runAppTestIfRequested() {
+        guard env["KB_APPTEST"] == "1" else { return }
+        let calc = AppTarget(bundleID: "com.apple.calculator", path: "/System/Applications/Calculator.app", name: "Calculator")
+        let wasRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: calc.bundleID).isEmpty
+        AppLauncher.open(calc)
+        // Waits right here, before the rest of the app starts.
+        var running: NSRunningApplication?
+        for _ in 0..<60 where running == nil {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            running = NSRunningApplication.runningApplications(withBundleIdentifier: calc.bundleID).first
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        print("APPTEST launched: \(running != nil), frontmost: \(front ?? "nil"), was running before: \(wasRunning)")
+        if !wasRunning { running?.terminate() }
+        exit(running != nil ? 0 : 1)
+    }
+
     /// KB_SELFTEST=1: checks the layout fixer's logic and config decoding, prints the results and exits.
     /// Nothing is typed or switched: events are fed straight into the fixer's handler.
     static func runSelfTestIfRequested() {
@@ -260,6 +282,7 @@ enum DebugSnapshot {
             func key(_ keyCode: UInt16, down: Bool, modifiers: ModifierSet) { log.append("\(modifiers.symbols)\(keyCode)\(down ? "↓" : "↑")") }
             func text(_ text: String) { log.append("text:\(text)") }
             func wait(milliseconds: Int) { log.append("wait:\(milliseconds)") }
+            func openApp(_ app: AppTarget) { log.append("open:\(app.bundleID)") }
         }
         let fake = FakePoster()
         MacroPlayer.run(macroCombo.macro.map(\.step), stepDelay: 20, poster: fake) { false }
@@ -269,6 +292,48 @@ enum DebugSnapshot {
         var calls = 0
         MacroPlayer.run([down(0x38), .delay(10), down(0x00), up(0x00)], stepDelay: 0, poster: cancelled) { calls += 1; return calls > 2 }
         check("cancelled macro releases held keys", cancelled.log == ["⇧56↓", "wait:10", "56↑"], "\(cancelled.log)")
+
+        // Open App: combos and macro steps.
+        let calc = AppTarget(bundleID: "com.apple.calculator", path: "/System/Applications/Calculator.app", name: "Calculator")
+        var appCombo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []), output: KeyChord(keyCode: 0x69, modifiers: []))
+        appCombo.app = calc
+        check("app combo summary", appCombo.outputSummary == "Calculator" && appCombo.isApp && !appCombo.isMacro)
+        let appRoundTrip = (try? JSONEncoder().encode(appCombo)).flatMap { try? JSONDecoder().decode(ComboBinding.self, from: $0) }
+        check("app combo round-trip", appRoundTrip == appCombo)
+        let preAppCombo = #"{"trigger":{"keyCode":105,"modifiers":0},"output":{"keyCode":1,"modifiers":8}}"#
+        let decodedPreApp = try? JSONDecoder().decode(ComboBinding.self, from: Data(preAppCombo.utf8))
+        check("old combo has no app", decodedPreApp != nil && decodedPreApp?.app == nil && decodedPreApp?.isApp == false)
+        let minimal = #"{"bundleID":"com.apple.calculator"}"#
+        check("app target with only a bundle id decodes",
+              (try? JSONDecoder().decode(AppTarget.self, from: Data(minimal.utf8)))?.name == "com.apple.calculator")
+        check("valid app target", calc.isValid)
+        check("bundle id with a slash rejected", !AppTarget(bundleID: "a/../b", path: "", name: "x").isValid)
+        check("bundle id with spaces rejected", !AppTarget(bundleID: "rm -rf", path: "", name: "x").isValid)
+        check("non-app path rejected", !AppTarget(bundleID: "com.x", path: "/bin/sh", name: "x").isValid)
+        check("relative path rejected", !AppTarget(bundleID: "com.x", path: "Evil.app", name: "x").isValid)
+        check("overlong bundle id rejected", !AppTarget(bundleID: String(repeating: "a", count: 300), path: "", name: "x").isValid)
+        var hostileApps = AppConfig()
+        var badCombo = appCombo
+        badCombo.app = AppTarget(bundleID: "com.x", path: "/usr/bin/osascript", name: "x")
+        badCombo.id = UUID()
+        var longName = appCombo
+        longName.id = UUID()
+        longName.app?.name = String(repeating: "n", count: 500)
+        var appMacro = macroCombo
+        appMacro.id = UUID()
+        appMacro.macro = [MacroItem(step: .openApp(calc)), MacroItem(step: .openApp(AppTarget(bundleID: "bad id", path: "", name: "x")))]
+        hostileApps.combos = [badCombo, longName, appMacro]
+        let cleanApps = hostileApps.sanitized().combos
+        check("combo with a bad app dropped", cleanApps.count == 2 && !cleanApps.contains { $0.id == badCombo.id })
+        check("app name capped", cleanApps.first { $0.id == longName.id }?.app?.name.count == AppTarget.Limits.name)
+        check("bad open-app step dropped", cleanApps.first { $0.id == appMacro.id }?.macro.map(\.step) == [.openApp(calc)])
+        check("open-app step display", MacroStep.openApp(calc).display == "Open Calculator")
+        let appPlay = FakePoster()
+        MacroPlayer.run([.openApp(calc), .text("2+2")], stepDelay: 0, poster: appPlay) { false }
+        check("macro opens the app before the next step", appPlay.log == ["open:com.apple.calculator", "text:2+2"], "\(appPlay.log)")
+        check("app found by bundle id", AppLauncher.url(for: calc) != nil)
+        check("target from an .app", AppLauncher.target(for: URL(fileURLWithPath: "/System/Applications/Calculator.app"))?.bundleID == "com.apple.calculator")
+        check("no target from a non-app", AppLauncher.target(for: URL(fileURLWithPath: "/bin/sh")) == nil)
 
         // Duplicate reports are dropped, but a key released while nobody listened can be pressed again.
         var filter = KeyStateFilter()
@@ -422,6 +487,7 @@ enum DebugSnapshot {
     static var opensEditor: Bool { false }
     static var opensComboEditor: Bool { false }
     static var opensMacroEditor: Bool { false }
+    static var opensAppEditor: Bool { false }
     static var showsOnboarding: Bool { false }
     static var isActive: Bool { false }
     static var isSelfTest: Bool { false }
@@ -431,6 +497,7 @@ enum DebugSnapshot {
     static func record(_ name: String, _ value: CGFloat) {}
     static func runIfRequested(window: NSWindow) {}
     static func runSelfTestIfRequested() {}
+    static func runAppTestIfRequested() {}
     #endif
 }
 

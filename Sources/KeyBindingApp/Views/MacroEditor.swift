@@ -78,6 +78,7 @@ struct MacroEditor: View {
                 Button("Key Up") { add([.keyUp(KeyChord(keyCode: 0x00, modifiers: []))]) }
                 Button("Delay") { add([.delay(100)]) }
                 Button("Type Text") { add([.text("")]) }
+                Button("Open App…") { if let app = AppLauncher.choose() { add([.openApp(app)]) } }
                 Divider()
                 Button("Key Press (Down + Up)") {
                     let key = KeyChord(keyCode: 0x00, modifiers: [])
@@ -311,6 +312,8 @@ private struct MacroStepRow: View {
                 .help("Common delays")
             case .text:
                 textStep
+            case .openApp:
+                AppPickerField(app: appBinding)
             }
             Spacer(minLength: 0)
         }
@@ -355,6 +358,7 @@ private struct MacroStepRow: View {
         case .keyUp: return "Up"
         case .delay: return "Delay"
         case .text: return "Type text"
+        case .openApp: return "Open app"
         }
     }
 
@@ -365,6 +369,7 @@ private struct MacroStepRow: View {
         case .keyUp: return "arrow.up"
         case .delay: return "timer"
         case .text: return "textformat"
+        case .openApp: return "arrow.up.forward.app"
         }
     }
 
@@ -374,6 +379,13 @@ private struct MacroStepRow: View {
         case .keyUp: return .orange
         default: return .secondary
         }
+    }
+
+    private var appBinding: Binding<AppTarget?> {
+        Binding(
+            get: { if case .openApp(let app) = item.step { return app } else { return nil } },
+            set: { if let app = $0 { item.step = .openApp(app) } }
+        )
     }
 
     private var keyBinding: Binding<KeyChord> {

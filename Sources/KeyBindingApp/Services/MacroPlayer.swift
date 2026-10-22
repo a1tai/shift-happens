@@ -6,6 +6,7 @@ protocol KeyEventPosting {
     func key(_ keyCode: UInt16, down: Bool, modifiers: ModifierSet)
     func text(_ text: String)
     func wait(milliseconds: Int)
+    func openApp(_ app: AppTarget)
 }
 
 /// Posts key events at the HID level, marked so the app's own event taps let them through.
@@ -42,6 +43,10 @@ struct CGEventPoster: KeyEventPosting {
 
     func wait(milliseconds: Int) {
         usleep(useconds_t(max(0, milliseconds)) * 1000)
+    }
+
+    func openApp(_ app: AppTarget) {
+        AppLauncher.openAndWait(app)
     }
 }
 
@@ -131,6 +136,8 @@ final class MacroPlayer {
                 poster.wait(milliseconds: ms)
             case .text(let text):
                 poster.text(text)
+            case .openApp(let app):
+                poster.openApp(app)
             }
             let next = steps.dropFirst(index + 1).first
             if stepDelay > 0, !step.isDelay, let next, !next.isDelay {
