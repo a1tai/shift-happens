@@ -36,7 +36,7 @@ a regular macOS window and lives in the menu bar afterwards.
 
 ## Install
 
-Download `Shift Happens.zip` from [Releases](../../releases), unzip it and move **Shift Happens** to
+Download `Shift Happens.zip` from [Releases](https://github.com/a1tai/shift-happens/releases), unzip it and move **Shift Happens** to
 Applications.
 
 The release build is not notarized, so macOS warns on first open. Open it anyway with right-click → Open,
@@ -44,6 +44,8 @@ or in System Settings → Privacy & Security → **Open Anyway**, or with
 `xattr -dr com.apple.quarantine "/Applications/Shift Happens.app"`.
 
 Requires macOS 13 or later.
+
+Found a bug or have an idea? Open an [issue](https://github.com/a1tai/shift-happens/issues).
 
 ## Permissions
 
@@ -67,7 +69,7 @@ Nothing you type is recorded, saved or sent anywhere. The app has no network acc
 - **Layout Fixer** remembers only the word being typed, in memory, to retype it; it forgets it on Return,
   Tab, Escape, a click, an app switch or a new word. To fix a selection it uses the clipboard briefly and
   puts your clipboard back afterwards.
-- The settings file (`~/Library/Application Support/KeyBindingApp/config.json`) holds your bindings,
+- The settings file (`~/Library/Application Support/Shift Happens/config.json`) holds your bindings,
   including any text you put in macros.
 
 ## Build from source
@@ -92,8 +94,8 @@ any screen to PNG (`KB_SNAPSHOT=out.png KB_SCREEN=combos .build/debug/KeyBinding
 
 1. Quit Shift Happens from its menu bar menu (its remaps stay active until a restart; to drop them now:
    `hidutil property --set '{"UserKeyMapping":[]}'`).
-2. Delete the app, `~/Library/Application Support/KeyBindingApp` and, if launch at login was on,
-   `~/Library/LaunchAgents/com.keybindingapp.agent.plist`.
+2. Delete the app, `~/Library/Application Support/Shift Happens` and, if launch at login was on,
+   `~/Library/LaunchAgents/io.github.a1tai.ShiftHappens.agent.plist`.
 3. Remove it from System Settings → Privacy & Security → Input Monitoring and Accessibility.
 
 ## How it works

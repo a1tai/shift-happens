@@ -66,7 +66,7 @@ final class AppState: NSObject, ObservableObject {
     private var inputActivity: NSObjectProtocol?
     private var permissionTimer: Timer?
     private var reapplyWork: DispatchWorkItem?
-    private let hidutilQueue = DispatchQueue(label: "KeyBindingApp.hidutil")
+    private let hidutilQueue = DispatchQueue(label: "ShiftHappens.hidutil")
     /// macOS's Accessibility dialog is triggered at most once per launch, not on every check.
     private var askedForAccessibility = false
     private static let onboardingDoneKey = "onboardingDone"
@@ -88,6 +88,7 @@ final class AppState: NSObject, ObservableObject {
             options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
             reason: "Handles keyboard input: remaps, combos and the layout fixer"
         )
+        Self.migrateDefaults()
         // The key history option is gone; drop its stored setting.
         UserDefaults.standard.removeObject(forKey: "keyMonitorKeepsHistory")
         LaunchAgent.refreshIfNeeded()
@@ -325,6 +326,16 @@ final class AppState: NSObject, ObservableObject {
 
     func displayName(of device: DeviceRef) -> String {
         devices.contains { $0.matches(device) } ? device.name : device.name + " (not connected)"
+    }
+
+    /// Versions before the rename kept their preferences (welcome sheet seen, permissions asked) under
+    /// another bundle id; copy what isn't set yet.
+    private static func migrateDefaults() {
+        let defaults = UserDefaults.standard
+        guard let old = defaults.persistentDomain(forName: "com.keybindingapp.KeyBindingApp") else { return }
+        for (key, value) in old where defaults.object(forKey: key) == nil && !key.hasPrefix("NS") {
+            defaults.set(value, forKey: key)
+        }
     }
 
     /// The keyboard a new remap or preset is for by default: an external one if connected.

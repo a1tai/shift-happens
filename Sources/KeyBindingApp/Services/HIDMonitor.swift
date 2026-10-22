@@ -56,7 +56,7 @@ final class HIDMonitor {
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
         let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         if result != kIOReturnSuccess {
-            NSLog("KeyBindingApp: IOHIDManagerOpen failed: \(result)")
+            NSLog("Shift Happens: IOHIDManagerOpen failed: \(result)")
             IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
             return false
         }

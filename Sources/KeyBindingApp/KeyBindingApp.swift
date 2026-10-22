@@ -23,11 +23,11 @@ struct KeyBindingApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    static let showWindowNotification = Notification.Name("com.keybindingapp.showWindow")
+    static let showWindowNotification = Notification.Name("io.github.a1tai.ShiftHappens.showWindow")
     #if DEBUG
     /// Same as the menu item; lets the Emoji & Symbols action be checked without clicking the menu.
     /// Debug builds only: in a release, other programs must not be able to make the app send keys.
-    static let showEmojiNotification = Notification.Name("com.keybindingapp.showEmojiAndSymbols")
+    static let showEmojiNotification = Notification.Name("io.github.a1tai.ShiftHappens.showEmojiAndSymbols")
     #endif
 
     /// NSApp.delegate is SwiftUI's wrapper, so views reach this object through here.

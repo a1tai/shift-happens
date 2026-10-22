@@ -12,7 +12,7 @@ import os
 /// Pressing the trigger again converts back. Needs the Accessibility permission.
 final class LayoutFixer {
     /// Only whether the tap runs. Nothing about keys or text is ever logged.
-    private static let log = Logger(subsystem: "com.keybindingapp.KeyBindingApp", category: "LayoutFixer")
+    private static let log = Logger(subsystem: "io.github.a1tai.ShiftHappens", category: "LayoutFixer")
 
     var trigger: LayoutTrigger = .bothOptions {
         didSet { resetTriggerState() }
