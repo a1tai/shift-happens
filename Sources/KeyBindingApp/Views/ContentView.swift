@@ -76,6 +76,9 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .sheet(isPresented: $state.showsOnboarding) {
+            OnboardingView().environmentObject(state)
+        }
     }
 }
 
@@ -111,8 +114,14 @@ struct PermissionBanner: View {
             if !state.inputMonitoringGranted {
                 banner(
                     text: "No Input Monitoring access: the app can't see key codes or notice keyboards being connected.",
-                    button: "Open Settings",
-                    action: Permissions.openInputMonitoring
+                    button: Permissions.wasRequested(.inputMonitoring) ? "Open Settings" : "Allow…",
+                    action: { Permissions.request(.inputMonitoring) }
+                )
+            } else if state.needsRelaunch {
+                banner(
+                    text: "Input Monitoring is allowed. Relaunch the app to start using it.",
+                    button: "Relaunch",
+                    action: Permissions.relaunch
                 )
             }
             if !state.accessibilityGranted && (usesCombos || state.config.layoutFixer.enabled) {
@@ -121,8 +130,8 @@ struct PermissionBanner: View {
                         ? "No Accessibility access: combos and the layout fixer don't work."
                         : usesCombos ? "No Accessibility access: combos don't work."
                         : "No Accessibility access: the layout fixer doesn't work.",
-                    button: "Allow",
-                    action: Permissions.openAccessibility
+                    button: Permissions.wasRequested(.accessibility) ? "Open Settings" : "Allow…",
+                    action: { Permissions.request(.accessibility) }
                 )
             }
         }

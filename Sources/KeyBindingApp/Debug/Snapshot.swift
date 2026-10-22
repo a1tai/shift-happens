@@ -9,6 +9,12 @@ enum DebugSnapshot {
     private static let env = ProcessInfo.processInfo.environment
     static var initialScreen: SidebarItem? { env["KB_SCREEN"].flatMap(SidebarItem.init(rawValue:)) }
     static var opensEditor: Bool { env["KB_EDIT"] == "1" }
+    /// KB_ONBOARDING=1 shows the welcome sheet as on a first launch.
+    static var showsOnboarding: Bool { env["KB_ONBOARDING"] == "1" }
+    /// While rendering snapshots the app must not ask for permissions or open System Settings.
+    static var isActive: Bool { env["KB_SNAPSHOT"] != nil }
+    /// KB_REQUESTED=1 renders permissions as if macOS had asked before (the "Reset and Ask Again" state).
+    static var assumesRequested: Bool { env["KB_REQUESTED"] == "1" }
 
     static func runIfRequested(window: NSWindow) {
         guard let path = env["KB_SNAPSHOT"] else { return }
@@ -139,6 +145,9 @@ enum DebugSnapshot {
     #else
     static var initialScreen: SidebarItem? { nil }
     static var opensEditor: Bool { false }
+    static var showsOnboarding: Bool { false }
+    static var isActive: Bool { false }
+    static var assumesRequested: Bool { false }
     static func runIfRequested(window: NSWindow) {}
     static func runSelfTestIfRequested() {}
     #endif

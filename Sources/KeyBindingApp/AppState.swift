@@ -35,6 +35,10 @@ final class AppState: NSObject, ObservableObject {
     @Published private(set) var accessibilityGranted = ComboEngine.hasAccess
     @Published private(set) var launchAtLogin = LaunchAgent.isEnabled
     @Published private(set) var lastError: String?
+    /// Input Monitoring was granted while the app ran, but macOS only applies it to a fresh process.
+    @Published private(set) var needsRelaunch = false
+    /// The permissions sheet, shown on first launch and from Settings.
+    @Published var showsOnboarding = false
     /// Enabled keyboard layouts and the current one, for the Layout Fixer screen.
     @Published private(set) var inputSources: [InputSourceInfo] = []
     @Published private(set) var currentInputSourceID: String?
@@ -53,6 +57,9 @@ final class AppState: NSObject, ObservableObject {
     private var reapplyWork: DispatchWorkItem?
     private let hidutilQueue = DispatchQueue(label: "KeyBindingApp.hidutil")
     private var layoutStatusItem: NSStatusItem?
+    /// macOS's Accessibility dialog is triggered at most once per launch, not on every check.
+    private var askedForAccessibility = false
+    private static let onboardingDoneKey = "onboardingDone"
 
     private override init() {
         config = ConfigStore.load()
@@ -71,7 +78,14 @@ final class AppState: NSObject, ObservableObject {
             // A keyboard that was just plugged in has no mapping yet.
             self.scheduleReapply()
         }
-        if !HIDMonitor.hasAccess { HIDMonitor.requestAccess() }
+        let missing = Permission.allCases.contains { !Permissions.isGranted($0) }
+        if (!UserDefaults.standard.bool(forKey: Self.onboardingDoneKey) && missing && !DebugSnapshot.isActive)
+            || DebugSnapshot.showsOnboarding {
+            // First launch: the welcome sheet explains and asks for both.
+            showsOnboarding = true
+        } else if !HIDMonitor.hasAccess && !Permissions.wasRequested(.inputMonitoring) && !DebugSnapshot.isActive {
+            Permissions.request(.inputMonitoring)
+        }
         hid.start()
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
@@ -98,17 +112,18 @@ final class AppState: NSObject, ObservableObject {
         applyAll()
         refreshPermissions()
         // Permissions are granted in System Settings while the app runs; pick them up without a restart.
-        permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        permissionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.refreshPermissions()
         }
     }
 
     func refreshPermissions() {
         let input = HIDMonitor.hasAccess
-        let ax = ComboEngine.hasAccess
+        // A running tap proves the permission even while the check still reports the old state.
+        let ax = ComboEngine.hasAccess || combos.isRunning || layoutFixer.isRunning
         if input != inputMonitoringGranted { inputMonitoringGranted = input }
         if ax != accessibilityGranted { accessibilityGranted = ax }
-        if input && !hid.isRunning { hid.start() }
+        if input && !hid.isRunning && !hid.start() && !needsRelaunch { needsRelaunch = true }
         updateComboEngine()
         updateLayoutFixer()
         let agent = LaunchAgent.isEnabled
@@ -141,10 +156,9 @@ final class AppState: NSObject, ObservableObject {
     private func updateComboEngine() {
         combos.bindings = config.combos
         let needed = config.enabled && config.combos.contains(where: \.enabled)
-        if needed && accessibilityGranted {
-            if !combos.isRunning && !combos.start() {
-                lastError = "Couldn't intercept keys. Check the Accessibility permission."
-            }
+        if needed {
+            // Try even when the check says no: it can lag behind a fresh grant.
+            if !combos.isRunning && !combos.start() { accessibilityMissing() }
         } else if combos.isRunning {
             combos.stop()
         }
@@ -153,14 +167,26 @@ final class AppState: NSObject, ObservableObject {
     private func updateLayoutFixer() {
         let settings = config.layoutFixer
         if layoutFixer.trigger != settings.trigger { layoutFixer.trigger = settings.trigger }
-        if settings.enabled && accessibilityGranted {
-            if !layoutFixer.isRunning && !layoutFixer.start() {
-                lastError = "Couldn't start the layout fixer. Check the Accessibility permission."
-            }
+        if settings.enabled {
+            if !layoutFixer.isRunning && !layoutFixer.start() { accessibilityMissing() }
         } else if layoutFixer.isRunning {
             layoutFixer.stop()
         }
         updateLayoutStatusItem()
+    }
+
+    /// A feature that needs Accessibility is on but can't start: ask macOS once per launch.
+    private func accessibilityMissing() {
+        // Not at login: a dialog or System Settings popping up on its own at startup would be a surprise.
+        guard !askedForAccessibility, !CommandLine.arguments.contains(LaunchAgent.backgroundArgument),
+              !DebugSnapshot.isActive else { return }
+        askedForAccessibility = true
+        Permissions.request(.accessibility)
+    }
+
+    func finishOnboarding() {
+        UserDefaults.standard.set(true, forKey: Self.onboardingDoneKey)
+        showsOnboarding = false
     }
 
     private func refreshInputSources() {

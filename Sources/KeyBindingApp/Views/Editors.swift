@@ -143,7 +143,7 @@ struct ComboEditor: View {
                 Button("Save") {
                     state.save(draft)
                     dismiss()
-                    if !state.accessibilityGranted { Permissions.openAccessibility() }
+                    if !state.accessibilityGranted { Permissions.request(.accessibility) }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(draft.trigger == draft.output)

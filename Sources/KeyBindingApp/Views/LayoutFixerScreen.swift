@@ -83,7 +83,7 @@ struct LayoutFixerScreen: View {
     private var warnings: some View {
         if state.config.layoutFixer.enabled && !state.accessibilityGranted {
             WarningRow(text: "Needs Accessibility access to watch typing and replace text.",
-                       button: "Open Settings", action: Permissions.openAccessibility)
+                       button: "Allow…", action: { Permissions.request(.accessibility) })
         }
         if state.inputSources.count < 2 {
             WarningRow(text: "Only one keyboard layout is enabled. Add another in System Settings → Keyboard → Text Input.",

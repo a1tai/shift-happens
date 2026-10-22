@@ -10,19 +10,16 @@ struct SettingsScreen: View {
 
     var body: some View {
         Form {
-            Section("Permissions") {
-                PermissionRow(
-                    title: "Input Monitoring",
-                    details: "To see key codes and which keyboard they came from.",
-                    granted: state.inputMonitoringGranted,
-                    action: Permissions.openInputMonitoring
-                )
-                PermissionRow(
-                    title: "Accessibility",
-                    details: "To turn one key combination into another and to fix the keyboard layout of typed text.",
-                    granted: state.accessibilityGranted,
-                    action: Permissions.openAccessibility
-                )
+            Section {
+                PermissionStatusRow(permission: .inputMonitoring)
+                PermissionStatusRow(permission: .accessibility, optional: true)
+            } header: {
+                HStack {
+                    Text("Permissions")
+                    Spacer()
+                    Button("Show Welcome Guide…") { state.showsOnboarding = true }
+                        .controlSize(.small)
+                }
             }
 
             Section {
@@ -120,29 +117,6 @@ struct SettingsScreen: View {
             message = "Imported \(counted(imported.remaps.count, "remap")) and \(counted(imported.combos.count, "combo"))."
         } catch {
             message = "Couldn't read the file: \(error.localizedDescription)"
-        }
-    }
-}
-
-private struct PermissionRow: View {
-    let title: String
-    let details: String
-    let granted: Bool
-    let action: () -> Void
-
-    var body: some View {
-        HStack {
-            Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(granted ? Color.green : Color.red)
-                .font(.title3)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(details).font(.callout).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if !granted {
-                Button("Open Settings", action: action)
-            }
         }
     }
 }

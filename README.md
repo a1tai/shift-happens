@@ -44,7 +44,9 @@ If the app was downloaded from GitHub Actions, macOS may refuse to open it. Then
 
 ## Permissions
 
-On first launch macOS asks for two permissions (System Settings → Privacy & Security):
+On first launch a welcome sheet asks for two permissions; each button shows macOS's own dialog, or opens
+System Settings → Privacy & Security if macOS has asked before. Turning on Combos or the Layout Fixer asks for
+Accessibility right away. The sheet is also in Settings → Permissions → Show Welcome Guide.
 
 | Permission | Why |
 |---|---|
@@ -54,7 +56,8 @@ On first launch macOS asks for two permissions (System Settings → Privacy & Se
 Plain remaps through `hidutil` work without either of them.
 
 The app is signed ad hoc, and macOS ties permissions to the signature. After every rebuild the permissions have to be
-granted again (remove the old entry and enable the new one). To avoid that, sign with your own certificate:
+granted again: System Settings may still show the old entry as on. **Reset and Ask Again** in the app removes that entry
+(`tccutil reset`) and asks again. Input Monitoring takes effect after a relaunch; the app offers a **Relaunch** button. To avoid that, sign with your own certificate:
 `SIGN_IDENTITY="Apple Development: you@example.com" ./scripts/build-app.sh`.
 
 ## How it works
