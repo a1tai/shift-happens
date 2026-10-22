@@ -24,17 +24,21 @@ struct LayoutFixerScreen: View {
                             Text(trigger.title).tag(trigger)
                         }
                     }
+                    Toggle("Switch layout after fixing", isOn: settings.switchesAfterFixing)
+                    Toggle("Switch layout when there's nothing to fix", isOn: settings.switchesWhenNothingToFix)
                     warnings
                 }
 
                 Section("How to use") {
                     HowToRow(icon: "character.cursor.ibeam", title: "Fix the last word",
                              details: "Type a word, then press and release the trigger key on its own. "
-                                + "The word is retyped in the next layout and the layout switches.")
+                                + "The word is retyped in the next layout.")
                     HowToRow(icon: "character.textbox", title: "Fix a selection",
-                             details: "Select text and press the trigger key. The layout it was typed in is detected.")
-                    HowToRow(icon: "globe", title: "Switch layout",
-                             details: "With nothing typed or selected, the trigger key switches to the next layout.")
+                             details: "Select text and press the trigger key. The layout it was typed in is detected; "
+                                + "a selection wins over the word typed before it.")
+                    HowToRow(icon: "globe", title: "Nothing to fix",
+                             details: "With nothing typed or selected, the trigger key does nothing, "
+                                + "or switches the layout if that option is on.")
                     HowToRow(icon: "arrow.uturn.backward", title: "Undo",
                              details: "Press the trigger key again to convert back.")
                     Text("Only a lone press counts, so shortcuts with the trigger key (like ⌥← or your combos) keep working. "

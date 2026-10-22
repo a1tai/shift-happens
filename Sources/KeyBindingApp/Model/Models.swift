@@ -242,6 +242,8 @@ enum LayoutTrigger: String, Codable, CaseIterable, Identifiable {
 struct LayoutFixerSettings: Codable, Equatable {
     var enabled = false
     var trigger: LayoutTrigger = .bothOptions
+    var switchesWhenNothingToFix = false
+    var switchesAfterFixing = true
 
     init() {}
 
@@ -249,6 +251,8 @@ struct LayoutFixerSettings: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
         trigger = (try? c.decodeIfPresent(LayoutTrigger.self, forKey: .trigger)) ?? .bothOptions
+        switchesWhenNothingToFix = try c.decodeIfPresent(Bool.self, forKey: .switchesWhenNothingToFix) ?? false
+        switchesAfterFixing = try c.decodeIfPresent(Bool.self, forKey: .switchesAfterFixing) ?? true
     }
 }
 

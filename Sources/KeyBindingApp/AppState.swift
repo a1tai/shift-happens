@@ -217,6 +217,8 @@ final class AppState: NSObject, ObservableObject {
     private func updateLayoutFixer() {
         let settings = config.layoutFixer
         if layoutFixer.trigger != settings.trigger { layoutFixer.trigger = settings.trigger }
+        layoutFixer.switchesWhenNothingToFix = settings.switchesWhenNothingToFix
+        layoutFixer.switchesAfterFixing = settings.switchesAfterFixing
         if layoutFixer.takesFnFromHID != inputMonitoringGranted {
             layoutFixer.takesFnFromHID = inputMonitoringGranted
             if inputMonitoringGranted {

@@ -20,6 +20,10 @@ final class LayoutFixer {
     }
     /// Checked on every event: while true, keys pass through and nothing is fixed.
     var isPaused: () -> Bool = { false }
+    /// With nothing typed or selected, the trigger switches to the next layout (otherwise it does nothing).
+    var switchesWhenNothingToFix = false
+    /// After fixing a word or selection, switch to the layout it was converted to.
+    var switchesAfterFixing = true
     /// fn presses come from the HID monitor (`handleFnFromHID`): on MacBooks fn never reaches event taps.
     var takesFnFromHID = false
     /// Replaces the fixing itself (used by the debug self-test, which must not type anything).
@@ -282,10 +286,16 @@ final class LayoutFixer {
         }
         // Leave the tap callback quickly; the work below talks to other apps.
         DispatchQueue.main.async { [self] in
-            if word.isEmpty {
-                fixSelection()
-            } else {
+            let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?"
+            // A selection wins over the word typed before it.
+            if let text = Accessibility.selectedText() {
+                Self.log.notice("Selection read via Accessibility in \(app, privacy: .public): \(text.count, privacy: .public) characters")
+                convertSelection(text)
+            } else if !word.isEmpty {
                 fixWord(word, trailingSpaces: trailingSpaces)
+            } else {
+                Self.log.notice("No selection via Accessibility in \(app, privacy: .public); trying the app's Copy")
+                fixSelectionViaCopy()
             }
         }
     }
@@ -305,7 +315,7 @@ final class LayoutFixer {
             for _ in 0..<deleteCount { postBackspace() }
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [self] in
                 paste(newText)
-                sources.select(next)
+                if switchesAfterFixing { sources.select(next) }
                 restorePasteboard(saved, afterCharCount: deleteCount)
             }
         }
@@ -313,37 +323,38 @@ final class LayoutFixer {
 
     // MARK: - Fixing the selection
 
-    private func fixSelection() {
-        if let text = Accessibility.selectedText() {
-            convertSelection(text, viaClipboard: false)
-            return
-        }
-        // Some apps don't expose the selection: copy it through the app's own Edit menu.
+    /// For apps that don't expose the selection: copy it through the app's own Edit menu.
+    private func fixSelectionViaCopy() {
         let changeCount = pasteboard.changeCount
         let saved = savePasteboard()
         guard Accessibility.performCopy() else {
-            sources.selectNext()
+            Self.log.notice("Nothing to fix (no enabled Copy)")
+            nothingToFix()
             return
         }
         waitForPasteboardChange(from: changeCount) { [self] text in
             // Copy in Finder copies files; pasting their converted names would duplicate them.
             let copiedFiles = pasteboard.string(forType: .fileURL) != nil
             guard let text, !text.isEmpty, !copiedFiles else {
+                Self.log.notice("Nothing to fix (Copy gave no text)")
                 if pasteboard.changeCount != changeCount { restorePasteboard(saved, afterCharCount: 0) }
-                sources.selectNext()
+                nothingToFix()
                 return
             }
-            convertSelection(text, viaClipboard: true, savedClipboard: saved)
+            Self.log.notice("Selection read via Copy: \(text.count, privacy: .public) characters")
+            convertSelection(text, savedClipboard: saved)
         }
     }
 
-    private func convertSelection(_ text: String, viaClipboard: Bool,
-                                  savedClipboard: [[(NSPasteboard.PasteboardType, Data)]] = []) {
+    private func nothingToFix() {
+        if switchesWhenNothingToFix { sources.selectNext() }
+    }
+
+    /// Converts the selected text and pastes it over the selection (setting it through Accessibility
+    /// reports success in many apps without changing anything). The clipboard is put back afterwards.
+    private func convertSelection(_ text: String, savedClipboard: [[(NSPasteboard.PasteboardType, Data)]]? = nil) {
         let ids = sources.enabled().map(\.id)
-        guard let current = sources.currentID(), ids.count >= 2 else {
-            sources.selectNext()
-            return
-        }
+        guard let current = sources.currentID(), ids.count >= 2 else { return }
         let from: String
         let to: String
         if let detected = sources.detectLayout(of: text, among: ids) {
@@ -353,17 +364,15 @@ final class LayoutFixer {
             from = current
             to = sources.nextID(after: current) ?? ids.first { $0 != current }!
         }
-        guard let converted = sources.convert(text, from: from, to: to) else {
-            sources.selectNext()
+        guard let converted = sources.convert(text, from: from, to: to), converted != text else {
+            Self.log.notice("Selection unchanged by conversion \(from, privacy: .public) → \(to, privacy: .public)")
             return
         }
-        if !viaClipboard && Accessibility.replaceSelectedText(with: converted) {
-            // Done in place.
-        } else {
-            paste(converted)
-            if viaClipboard { restorePasteboard(savedClipboard, afterCharCount: converted.count) }
-        }
-        if to != current { sources.select(to) }
+        Self.log.notice("Pasting converted selection \(from, privacy: .public) → \(to, privacy: .public)")
+        let saved = savedClipboard ?? savePasteboard()
+        paste(converted)
+        restorePasteboard(saved, afterCharCount: converted.count)
+        if switchesAfterFixing && to != current { sources.select(to) }
     }
 
     // MARK: - Typing and the clipboard
