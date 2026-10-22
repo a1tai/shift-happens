@@ -97,7 +97,9 @@ enum DebugSnapshot {
 
         type("ghbdtn"); tapOption(); expect("lone Option fixes the word", word: "ghbdtn")
         type("ab  "); tapOption(); expect("trailing spaces are kept", word: "ab", spaces: 2)
-        type("one two"); tapOption(); expect("only the last word", word: "two")
+        type("one two")
+        check("buffer holds only the current word", fixer.buffer.count == 3, "\(fixer.buffer.count) keys")
+        tapOption(); expect("only the last word", word: "two")
         type("abc"); keyDown(TypedKey(keyCode: 51, shift: false, capsLock: false)); tapOption()
         expect("backspace removes a key", word: "ab")
         type("abc"); keyDown(TypedKey(keyCode: 36, shift: false, capsLock: false)); tapOption()

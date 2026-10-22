@@ -37,8 +37,10 @@ struct KeyboardScreen: View {
             .padding(24)
         }
         .onAppear {
+            state.setKeyboardScreenOpen(true)
             if DebugSnapshot.opensEditor, let esc = KeyboardLayout.keys.first { edit(esc) }
         }
+        .onDisappear { state.setKeyboardScreenOpen(false) }
         .sheet(item: $editing) { remap in
             RemapEditor(remap: remap)
         }

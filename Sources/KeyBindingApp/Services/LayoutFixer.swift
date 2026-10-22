@@ -20,6 +20,8 @@ final class LayoutFixer {
 
     let sources = InputSources()
 
+    /// The keys of the current word (and spaces typed after it). Memory only, never logged or saved;
+    /// kept after a fix so a second press can undo it.
     private(set) var buffer: [TypedKey] = []
     private let maxBufferSize = 64
     private var triggerDown = false
@@ -159,6 +161,10 @@ final class LayoutFixer {
         guard keyCode <= InputSources.maxPrintableKeyCode else {
             clearBuffer()
             return
+        }
+        // Only the word being typed is kept: a new word drops the previous one and the spaces after it.
+        if keyCode != InputSources.spaceKeyCode && buffer.last?.keyCode == InputSources.spaceKeyCode {
+            clearBuffer()
         }
         buffer.append(TypedKey(keyCode: keyCode, shift: flags.contains(.maskShift),
                                capsLock: flags.contains(.maskAlphaShift)))

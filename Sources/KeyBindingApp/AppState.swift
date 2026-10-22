@@ -29,8 +29,17 @@ final class AppState: NSObject, ObservableObject {
     }
 
     @Published private(set) var devices: [DeviceRef] = []
+    /// Key presses seen by the Key Monitor. Memory only, and only while that screen is being looked at.
     @Published private(set) var log: [KeyLogEntry] = []
+    /// Keys held down right now, for the Keyboard screen. Only tracked while it is being looked at.
     @Published private(set) var pressedKeys: Set<UInt64> = []
+    /// Key Monitor keeps a list of recent presses instead of just the last one. Only this choice is saved.
+    @Published var keepsKeyHistory = UserDefaults.standard.bool(forKey: AppState.keepsKeyHistoryKey) {
+        didSet {
+            UserDefaults.standard.set(keepsKeyHistory, forKey: Self.keepsKeyHistoryKey)
+            trimLog()
+        }
+    }
     @Published private(set) var inputMonitoringGranted = HIDMonitor.hasAccess
     @Published private(set) var accessibilityGranted = ComboEngine.hasAccess
     @Published private(set) var launchAtLogin = LaunchAgent.isEnabled
@@ -60,6 +69,13 @@ final class AppState: NSObject, ObservableObject {
     /// macOS's Accessibility dialog is triggered at most once per launch, not on every check.
     private var askedForAccessibility = false
     private static let onboardingDoneKey = "onboardingDone"
+    private static let keepsKeyHistoryKey = "keyMonitorKeepsHistory"
+    private static let historyLimit = 50
+
+    /// Which key-showing screens are open, and whether the window is actually in front of the user.
+    private var monitorScreenOpen = false
+    private var keyboardScreenOpen = false
+    private var windowVisible = false
 
     private override init() {
         config = ConfigStore.load()
@@ -72,6 +88,15 @@ final class AppState: NSObject, ObservableObject {
         LaunchAgent.refreshIfNeeded()
 
         hid.onKey = { [weak self] event in self?.handle(hidEvent: event) }
+        hid.isListening = { [weak self] in
+            guard let self else { return false }
+            return self.isMonitorViewed || self.isKeyboardViewed || self.captureHandler != nil
+        }
+        for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.forgetKeysNoLongerViewed()
+            }
+        }
         hid.onDevicesChanged = { [weak self] devices in
             guard let self else { return }
             self.devices = devices
@@ -279,28 +304,74 @@ final class AppState: NSObject, ObservableObject {
 
     func clearLog() { log.removeAll() }
 
+    // MARK: - Who is looking at key presses
+
+    private var isMonitorViewed: Bool { monitorScreenOpen && windowVisible && NSApp.isActive }
+    private var isKeyboardViewed: Bool { keyboardScreenOpen && windowVisible && NSApp.isActive }
+
+    func setMonitorScreenOpen(_ open: Bool) {
+        monitorScreenOpen = open
+        forgetKeysNoLongerViewed()
+    }
+
+    func setKeyboardScreenOpen(_ open: Bool) {
+        keyboardScreenOpen = open
+        forgetKeysNoLongerViewed()
+    }
+
+    /// Called by the window: closed, minimized, hidden behind other windows or on another Space counts as not visible.
+    func setWindowVisible(_ visible: Bool) {
+        windowVisible = visible
+        forgetKeysNoLongerViewed()
+    }
+
+    /// Drops everything about key presses as soon as nobody can see it.
+    private func forgetKeysNoLongerViewed() {
+        if !isMonitorViewed && !log.isEmpty { log.removeAll() }
+        if !isKeyboardViewed && !pressedKeys.isEmpty { pressedKeys.removeAll() }
+    }
+
+    private func trimLog() {
+        let limit = keepsKeyHistory ? Self.historyLimit : 1
+        if log.count > limit { log.removeLast(log.count - limit) }
+    }
+
     // MARK: - Key events
 
     private func handle(hidEvent: HIDKeyEvent) {
         let value = hidEvent.usage.hidutilValue
-        if hidEvent.isDown {
-            pressedKeys.insert(value)
-        } else {
-            pressedKeys.remove(value)
+        if isKeyboardViewed {
+            if hidEvent.isDown {
+                pressedKeys.insert(value)
+            } else {
+                pressedKeys.remove(value)
+            }
         }
         guard hidEvent.isDown else { return }
 
+        // A "press a key" button gets exactly this one press, nothing is kept.
         if let handler = captureHandler {
             captureHandler = nil
             handler(hidEvent)
+            return
         }
+        guard isMonitorViewed else { return }
         log.insert(KeyLogEntry(hid: hidEvent, time: hidEvent.time), at: 0)
-        if log.count > 100 { log.removeLast(log.count - 100) }
+        trimLog()
         // Redraw once it is clear whether macOS produced a key event for this press.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.objectWillChange.send() }
     }
 
     private func handle(localEvent event: NSEvent) -> NSEvent? {
+        if isMonitorViewed { addToLog(event) }
+        if swallowLocalKeys > 0, event.type == .keyDown, !event.modifierFlags.contains(.command) {
+            return nil
+        }
+        return event
+    }
+
+    /// Adds what macOS made of a key press to the monitor's entry for it.
+    private func addToLog(_ event: NSEvent) {
         let isModifier = event.type == .flagsChanged
         let modifiers = ModifierSet(nsFlags: event.modifierFlags)
         // Attach what macOS produced to the raw press that just happened, if there is one.
@@ -314,10 +385,7 @@ final class AppState: NSObject, ObservableObject {
             log.insert(KeyLogEntry(hid: nil, macKeyCode: event.keyCode,
                                    characters: isModifier ? nil : event.characters,
                                    macModifiers: modifiers, time: Date()), at: 0)
+            trimLog()
         }
-        if swallowLocalKeys > 0, event.type == .keyDown, !event.modifierFlags.contains(.command) {
-            return nil
-        }
-        return event
     }
 }

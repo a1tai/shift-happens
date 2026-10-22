@@ -60,6 +60,19 @@ granted again: System Settings may still show the old entry as on. **Reset and A
 (`tccutil reset`) and asks again. Input Monitoring takes effect after a relaunch; the app offers a **Relaunch** button. To avoid that, sign with your own certificate:
 `SIGN_IDENTITY="Apple Development: you@example.com" ./scripts/build-app.sh`.
 
+## Privacy
+
+Nothing you type is recorded, saved or sent anywhere.
+
+- **Key Monitor** shows presses only while its screen is visible and the app is in front. History is off by default;
+  when on, it keeps the last 50 presses in memory and drops them as soon as you leave the screen, close or minimize
+  the window, or switch to another app. Only the on/off choice is saved.
+- **Keyboard screen** highlights held keys only while it is visible. Otherwise key presses from the keyboard are ignored
+  as soon as they arrive; "press a key" buttons receive just the one press they ask for.
+- **Layout Fixer** has to remember the word being typed to retype it. It holds only that word in memory and forgets it on
+  Return, Tab, Escape, a click, switching apps, a new word or when the fixer is turned off. It is never logged or saved.
+- `config.json` holds only your bindings and settings.
+
 ## How it works
 
 | File | What it does |

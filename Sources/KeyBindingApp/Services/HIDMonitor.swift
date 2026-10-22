@@ -15,6 +15,8 @@ struct HIDKeyEvent: Identifiable, Equatable {
 /// and tells which keyboard a press came from. Needs the Input Monitoring permission.
 final class HIDMonitor {
     var onKey: ((HIDKeyEvent) -> Void)?
+    /// Key presses are dropped right away unless something on screen needs them.
+    var isListening: () -> Bool = { false }
     /// Called when a keyboard is connected or disconnected.
     var onDevicesChanged: (([DeviceRef]) -> Void)?
 
@@ -79,6 +81,7 @@ final class HIDMonitor {
     }
 
     private func handle(value: IOHIDValue) {
+        guard isListening() else { return }
         let element = IOHIDValueGetElement(value)
         let page = IOHIDElementGetUsagePage(element)
         let usage = IOHIDElementGetUsage(element)

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Live view of every key press: the raw code from the keyboard and what macOS turned it into.
+/// Live view of key presses: the raw code from the keyboard and what macOS turned it into.
+/// Presses exist only in memory while this screen is on screen; nothing is saved.
 struct MonitorScreen: View {
     @EnvironmentObject private var state: AppState
     @State private var editingRemap: KeyRemap?
@@ -11,6 +12,9 @@ struct MonitorScreen: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Key Monitor").font(.largeTitle.bold())
                 Text("Press any key on the keyboard. While this screen is open, key presses don't reach other fields in the app.")
+                    .foregroundStyle(.secondary)
+                Label("Nothing is saved. History is cleared when you leave this screen.", systemImage: "lock.shield")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
@@ -27,46 +31,64 @@ struct MonitorScreen: View {
             }
 
             HStack {
-                Text("History").font(.headline)
+                Toggle("Keep history", isOn: $state.keepsKeyHistory)
+                    .toggleStyle(.switch)
+                    .help("List the last \(50) presses instead of only the last one. Kept in memory while you look at this screen.")
                 Spacer()
-                Button("Clear", action: state.clearLog).disabled(state.log.isEmpty)
+                if state.keepsKeyHistory {
+                    Button("Clear", action: state.clearLog).disabled(state.log.isEmpty)
+                }
             }
-            Table(state.log) {
-                TableColumn("Time") { entry in
-                    Text(entry.time, format: .dateTime.hour().minute().second())
-                        .foregroundStyle(.secondary)
-                }
-                .width(70)
-                TableColumn("Key") { entry in
-                    Text(entry.keyName)
-                }
-                TableColumn("HID code") { entry in
-                    Text(entry.hid.map { $0.usage.hexDescription } ?? "—").font(.body.monospaced())
-                }
-                .width(110)
-                TableColumn("macOS code") { entry in
-                    if let code = entry.macKeyCode {
-                        Text("\(code) (0x\(String(code, radix: 16, uppercase: true)))").font(.body.monospaced())
-                    } else {
-                        Text(entry.macIgnoredIt ? "not received" : "—")
-                            .foregroundStyle(entry.macIgnoredIt ? Color.orange : .secondary)
-                    }
-                }
-                .width(110)
-                TableColumn("Character") { entry in
-                    Text(entry.symbol).font(.body.monospaced())
-                }
-                .width(70)
-                TableColumn("Keyboard") { entry in
-                    Text(entry.hid?.device.name ?? "—").foregroundStyle(.secondary)
-                }
+            if state.keepsKeyHistory {
+                historyTable
+            } else {
+                Spacer(minLength: 0)
             }
         }
         .padding(24)
-        .onAppear { state.swallowLocalKeys += 1 }
-        .onDisappear { state.swallowLocalKeys -= 1 }
+        .onAppear {
+            state.swallowLocalKeys += 1
+            state.setMonitorScreenOpen(true)
+        }
+        .onDisappear {
+            state.swallowLocalKeys -= 1
+            state.setMonitorScreenOpen(false)
+        }
         .sheet(item: $editingRemap) { RemapEditor(remap: $0) }
         .sheet(item: $editingCombo) { ComboEditor(combo: $0) }
+    }
+
+    private var historyTable: some View {
+        Table(state.log) {
+            TableColumn("Time") { entry in
+                Text(entry.time, format: .dateTime.hour().minute().second())
+                    .foregroundStyle(.secondary)
+            }
+            .width(70)
+            TableColumn("Key") { entry in
+                Text(entry.keyName)
+            }
+            TableColumn("HID code") { entry in
+                Text(entry.hid.map { $0.usage.hexDescription } ?? "—").font(.body.monospaced())
+            }
+            .width(110)
+            TableColumn("macOS code") { entry in
+                if let code = entry.macKeyCode {
+                    Text("\(code) (0x\(String(code, radix: 16, uppercase: true)))").font(.body.monospaced())
+                } else {
+                    Text(entry.macIgnoredIt ? "not received" : "—")
+                        .foregroundStyle(entry.macIgnoredIt ? Color.orange : .secondary)
+                }
+            }
+            .width(110)
+            TableColumn("Character") { entry in
+                Text(entry.symbol).font(.body.monospaced())
+            }
+            .width(70)
+            TableColumn("Keyboard") { entry in
+                Text(entry.hid?.device.name ?? "—").foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func remap(_ entry: KeyLogEntry) {

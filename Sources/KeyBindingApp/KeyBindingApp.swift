@@ -81,8 +81,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setFrameAutosaveName("MainWindow")
             if !window.setFrameUsingName("MainWindow") { window.center() }
             NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { _ in
+                AppState.shared.setWindowVisible(window.occlusionState.contains(.visible))
+            }
+            NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification, object: window, queue: .main
             ) { _ in
+                AppState.shared.setWindowVisible(false)
                 // Back to a menu-bar-only app: no Dock icon while the window is closed.
                 NSApp.setActivationPolicy(.accessory)
             }
@@ -91,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)
+        AppState.shared.setWindowVisible(true)
         NSApp.activate(ignoringOtherApps: true)
     }
 }
