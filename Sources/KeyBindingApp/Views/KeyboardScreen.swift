@@ -8,7 +8,7 @@ struct KeyboardScreen: View {
     @State private var editing: KeyRemap?
     @State private var hovered: UInt32?
 
-    private var device: DeviceRef? { state.devices.first { $0.id == deviceID } }
+    private var device: DeviceRef? { state.keyboardChoices.first { $0.id == deviceID } }
 
     var body: some View {
         ScrollView(.vertical) {
@@ -56,9 +56,9 @@ struct KeyboardScreen: View {
             Spacer()
             Picker("Keyboard", selection: $deviceID) {
                 Text("All keyboards").tag(String?.none)
-                if !state.devices.isEmpty { Divider() }
-                ForEach(state.devices) { device in
-                    Text(device.name).tag(String?.some(device.id))
+                if !state.keyboardChoices.isEmpty { Divider() }
+                ForEach(state.keyboardChoices) { device in
+                    Text(state.displayName(of: device)).tag(String?.some(device.id))
                 }
             }
             .frame(maxWidth: 280)

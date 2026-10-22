@@ -53,7 +53,10 @@ enum RemapEngine {
     }
 
     static func matchingJSON(_ device: DeviceRef) -> String {
-        "{\"VendorID\":\(device.vendorID),\"ProductID\":\(device.productID)}"
+        // Vendor and product are 0 on the built-in keyboard, as on other built-in parts.
+        device.isBuiltIn
+            ? "{\"Built-In\":true,\"PrimaryUsagePage\":1,\"PrimaryUsage\":6}"
+            : "{\"VendorID\":\(device.vendorID),\"ProductID\":\(device.productID)}"
     }
 
     /// The equivalent Terminal command, shown in the UI for transparency.

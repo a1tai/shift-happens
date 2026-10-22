@@ -27,7 +27,7 @@ struct RemapsScreen: View {
                 .disabled(selection.isEmpty)
                 Button {
                     let start = HIDUsage(page: HIDPage.keyboard, usage: 0x39)
-                    editing = KeyRemap(from: start, to: start, device: state.devices.first)
+                    editing = KeyRemap(from: start, to: start, device: state.defaultKeyboard)
                 } label: {
                     Label("Add", systemImage: "plus")
                 }
@@ -53,7 +53,7 @@ struct RemapsScreen: View {
                         }
                     }
                     TableColumn("Keyboard") { remap in
-                        Text(remap.device?.name ?? "All keyboards")
+                        Text(remap.device.map(state.displayName(of:)) ?? "All keyboards")
                             .foregroundStyle(remap.device == nil ? .secondary : .primary)
                     }
                     TableColumn("Codes") { remap in

@@ -75,8 +75,7 @@ final class HIDMonitor {
             onDevicesChanged?(devices)
             return
         }
-        var seen = Set<String>()
-        devices = set.map(Self.deviceRef).filter { seen.insert($0.id).inserted }.sorted { $0.name < $1.name }
+        devices = Self.keyboards(in: set)
         onDevicesChanged?(devices)
     }
 
@@ -102,12 +101,42 @@ final class HIDMonitor {
         onKey?(HIDKeyEvent(usage: HIDUsage(page: page, usage: usage), isDown: pressed, device: device, time: Date()))
     }
 
+    /// Media buttons (headsets) and mice with programmable buttons also match the manager;
+    /// only real keyboards are listed, one entry per keyboard, the built-in one first.
+    static func keyboards(in set: Set<IOHIDDevice>) -> [DeviceRef] {
+        var seen = Set<String>()
+        return set.filter(isKeyboard).map(deviceRef)
+            .filter { seen.insert($0.id).inserted }
+            .sorted { ($0.isBuiltIn ? 0 : 1, $0.name) < ($1.isBuiltIn ? 0 : 1, $1.name) }
+    }
+
     private static func deviceRef(_ device: IOHIDDevice) -> DeviceRef {
         let vendor = IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int ?? 0
         let product = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int ?? 0
+        if isBuiltInKeyboard(device) {
+            return DeviceRef(vendorID: vendor, productID: product, name: "MacBook keyboard (built-in)", isBuiltIn: true)
+        }
         var name = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? ""
         if name.isEmpty { name = String(format: "Keyboard %04X:%04X", vendor, product) }
         return DeviceRef(vendorID: vendor, productID: product, name: name)
+    }
+
+    /// The (page, usage) pairs a device declares, e.g. 1/6 keyboard, 1/2 mouse, 12/1 media buttons.
+    private static func usagePairs(_ device: IOHIDDevice) -> Set<[Int]> {
+        let pairs = IOHIDDeviceGetProperty(device, kIOHIDDeviceUsagePairsKey as CFString) as? [[String: Int]] ?? []
+        return Set(pairs.map { [$0[kIOHIDDeviceUsagePageKey] ?? 0, $0[kIOHIDDeviceUsageKey] ?? 0] })
+    }
+
+    private static func isBuiltInKeyboard(_ device: IOHIDDevice) -> Bool {
+        let builtIn = (IOHIDDeviceGetProperty(device, kIOHIDBuiltInKey as CFString) as? Bool) ?? false
+        return builtIn && usagePairs(device).contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard])
+    }
+
+    /// A keyboard, not a headset with volume buttons or a mouse that can also send keys.
+    private static func isKeyboard(_ device: IOHIDDevice) -> Bool {
+        let pairs = usagePairs(device)
+        guard pairs.contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard]) else { return false }
+        return isBuiltInKeyboard(device) || !pairs.contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Mouse])
     }
 
     // MARK: - Permission

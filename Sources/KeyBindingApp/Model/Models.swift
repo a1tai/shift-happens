@@ -18,10 +18,32 @@ struct DeviceRef: Codable, Hashable, Identifiable {
     var vendorID: Int
     var productID: Int
     var name: String
+    /// The MacBook's own keyboard. It reports vendor and product 0, like other built-in HID parts
+    /// (the headphone jack's buttons), so it is identified by this flag instead.
+    var isBuiltIn = false
 
-    var id: String { "\(vendorID):\(productID)" }
+    init(vendorID: Int, productID: Int, name: String, isBuiltIn: Bool = false) {
+        self.vendorID = vendorID
+        self.productID = productID
+        self.name = name
+        self.isBuiltIn = isBuiltIn
+    }
 
-    func matches(_ other: DeviceRef) -> Bool { vendorID == other.vendorID && productID == other.productID }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        vendorID = try c.decode(Int.self, forKey: .vendorID)
+        productID = try c.decode(Int.self, forKey: .productID)
+        name = try c.decode(String.self, forKey: .name)
+        isBuiltIn = try c.decodeIfPresent(Bool.self, forKey: .isBuiltIn) ?? false
+    }
+
+    var id: String { isBuiltIn ? "built-in" : "\(vendorID):\(productID)" }
+
+    func matches(_ other: DeviceRef) -> Bool {
+        isBuiltIn || other.isBuiltIn
+            ? isBuiltIn == other.isBuiltIn
+            : vendorID == other.vendorID && productID == other.productID
+    }
 }
 
 /// Simple key-to-key remap applied by the system (hidutil UserKeyMapping).

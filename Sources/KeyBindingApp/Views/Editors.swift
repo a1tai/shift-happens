@@ -38,7 +38,7 @@ struct RemapEditor: View {
                 Picker("Keyboard", selection: deviceSelection) {
                     Text("All keyboards (including built-in)").tag(String?.none)
                     ForEach(deviceOptions) { device in
-                        Text(device.name).tag(String?.some(device.id))
+                        Text(state.displayName(of: device)).tag(String?.some(device.id))
                     }
                 }
                 Toggle("Enabled", isOn: $draft.enabled)
@@ -81,7 +81,7 @@ struct RemapEditor: View {
     }
 
     private var deviceOptions: [DeviceRef] {
-        var list = state.devices
+        var list = state.keyboardChoices
         if let device = draft.device, !list.contains(where: { $0.matches(device) }) {
             list.append(device) // saved for a keyboard that is unplugged right now
         }

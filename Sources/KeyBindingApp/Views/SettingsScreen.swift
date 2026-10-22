@@ -37,7 +37,7 @@ struct SettingsScreen: View {
             Section("Presets for Windows keyboards") {
                 Picker("Keyboard for remaps", selection: $presetDeviceID) {
                     Text("All keyboards").tag(String?.none)
-                    ForEach(state.devices) { Text($0.name).tag(String?.some($0.id)) }
+                    ForEach(state.devices) { Text(state.displayName(of: $0)).tag(String?.some($0.id)) }
                 }
                 ForEach(Preset.allCases) { preset in
                     HStack(alignment: .top) {
@@ -85,7 +85,7 @@ struct SettingsScreen: View {
         .onAppear {
             // Most likely the user wants presets for the external (Windows) keyboard.
             if presetDeviceID == nil {
-                presetDeviceID = state.devices.first { !$0.name.localizedCaseInsensitiveContains("Apple") }?.id
+                presetDeviceID = state.defaultKeyboard?.id
             }
         }
     }

@@ -1,4 +1,5 @@
 import AppKit
+import IOKit.hid
 
 /// Debug builds only: renders the app's windows to PNG files so the layout can be checked
 /// without Screen Recording access. Driven by environment variables:
@@ -123,6 +124,24 @@ enum DebugSnapshot {
         fixer.trigger = .bothOptions
         fixer.isPaused = { true }
         type("abc"); tapOption(); expect("paused fixer does nothing", word: nil)
+
+        // Keyboards connected to this Mac, as the pickers will list them.
+        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        IOHIDManagerSetDeviceMatchingMultiple(manager, [
+            [kIOHIDDeviceUsagePageKey: kHIDPage_GenericDesktop, kIOHIDDeviceUsageKey: kHIDUsage_GD_Keyboard],
+            [kIOHIDDeviceUsagePageKey: kHIDPage_Consumer, kIOHIDDeviceUsageKey: kHIDUsage_Csmr_ConsumerControl],
+        ] as CFArray)
+        let keyboards = HIDMonitor.keyboards(in: IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? [])
+        print("Keyboards: \(keyboards.map { "\($0.name) [\($0.id)]" })")
+        check("no headset in keyboards", !keyboards.contains { $0.name == "Headset" })
+
+        // The built-in keyboard (vendor/product 0) never matches other 0/0 parts.
+        let builtIn = DeviceRef(vendorID: 0, productID: 0, name: "MacBook keyboard (built-in)", isBuiltIn: true)
+        let headset = DeviceRef(vendorID: 0, productID: 0, name: "Headset")
+        check("built-in ≠ other 0:0 device", !builtIn.matches(headset) && builtIn.id != headset.id)
+        check("built-in matched by flag", RemapEngine.matchingJSON(builtIn).contains("Built-In"))
+        let oldDevice = #"{"vendorID":1133,"productID":45077,"name":"K"}"#
+        check("old device entries decode", (try? JSONDecoder().decode(DeviceRef.self, from: Data(oldDevice.utf8)))?.isBuiltIn == false)
 
         // Config files from before the layout fixer still load.
         let old = #"{"enabled":true,"remaps":[],"combos":[],"knownDevices":[]}"#

@@ -296,6 +296,22 @@ final class AppState: NSObject, ObservableObject {
         launchAtLogin = LaunchAgent.isEnabled
     }
 
+    /// Keyboards for the pickers: the connected ones, then any a remap still refers to.
+    var keyboardChoices: [DeviceRef] {
+        var list = devices
+        for device in config.remaps.compactMap(\.device) where !list.contains(where: { $0.matches(device) }) {
+            list.append(device)
+        }
+        return list
+    }
+
+    func displayName(of device: DeviceRef) -> String {
+        devices.contains { $0.matches(device) } ? device.name : device.name + " (not connected)"
+    }
+
+    /// The keyboard a new remap or preset is for by default: an external one if connected.
+    var defaultKeyboard: DeviceRef? { devices.first { !$0.isBuiltIn } }
+
     /// Remaps that apply to `device` (nil = show every remap).
     func remaps(for device: DeviceRef?) -> [KeyRemap] {
         guard let device else { return config.remaps }
