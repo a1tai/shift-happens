@@ -1,63 +1,66 @@
 # KeyBindingApp
 
-Нативное приложение для macOS (SwiftUI), которое помогает подружить Windows-клавиатуру с Mac:
-показывает код каждой нажатой клавиши, переназначает клавиши и превращает одни сочетания в другие.
-Привязки сохраняются и восстанавливаются после перезагрузки.
+A native macOS app (SwiftUI) that makes a Windows keyboard work well with a Mac:
+it shows the code of every key you press, remaps keys and turns one key combination into another.
+Bindings are saved and restored after a restart.
 
-## Возможности
+## Features
 
-- **Клавиатура.** Нарисованная Windows-клавиатура: переназначенные клавиши подсвечены синим и подписаны новым значением,
-  клавиши с комбинациями отмечены фиолетовым, нажатые сейчас клавиши горят зелёным. Клик по клавише открывает редактор.
-- **Монитор клавиш.** Для каждого нажатия: HID-код (то, что шлёт клавиатура), код macOS, символ и название клавиатуры.
-  Если клавиатура прислала клавишу, а macOS её не получила, это видно сразу.
-- **Переназначения** (клавиша → клавиша) через системный `hidutil`. Можно применить ко всем клавиатурам или только
-  к Windows-клавиатуре, чтобы встроенная клавиатура MacBook не менялась. Цели включают медиаклавиши, громкость, яркость и Fn.
-- **Комбинации** (сочетание → сочетание), например `Insert → ⌘V`, `Ctrl+C → ⌘C`, `PrtSc → ⌘⇧4`.
-- **Готовые наборы** в Настройках: поменять местами Win и Alt, Print Screen, Home/End как в Windows, Ctrl-сочетания как в Windows.
-- **После перезагрузки** приложение запускается в фоне (LaunchAgent), снова применяет привязки и живёт в строке меню.
-  При подключении клавиатуры привязки применяются заново.
-- Экспорт и импорт настроек в JSON. Настройки лежат в `~/Library/Application Support/KeyBindingApp/config.json`.
+- **Keyboard.** A drawn Windows keyboard: remapped keys are highlighted in blue and labeled with their new value,
+  keys with combos are marked in purple, and keys you are pressing light up green. Click a key to open the editor.
+- **Key Monitor.** For each key press: the HID code (what the keyboard sends), the macOS key code, the character and the keyboard name.
+  If the keyboard sent a key that macOS never received, you see it right away.
+- **Remaps** (key → key) through the system `hidutil`. Apply them to every keyboard or only to the Windows keyboard,
+  so the MacBook's built-in keyboard stays unchanged. Targets include media keys, volume, brightness and Fn.
+- **Combos** (shortcut → shortcut), for example `Insert → ⌘V`, `Ctrl+C → ⌘C`, `PrtSc → ⌘⇧4`.
+- **Presets** in Settings: swap Win and Alt, Print Screen, Home/End like in Windows, Ctrl shortcuts like in Windows.
+- **After restart** the app starts in the background (LaunchAgent), reapplies the bindings and lives in the menu bar.
+  Bindings are reapplied whenever a keyboard is connected.
+- Export and import of settings as JSON. Settings live in `~/Library/Application Support/KeyBindingApp/config.json`.
 
-## Сборка
+## Building
 
-Нужны macOS 13+ и Xcode или Command Line Tools (`xcode-select --install`).
+Needs macOS 13+ and Xcode or the Command Line Tools (`xcode-select --install`).
 
 ```bash
 ./scripts/build-app.sh
 open build/KeyBindingApp.app
 ```
 
-Перенесите `build/KeyBindingApp.app` в «Программы» и запускайте оттуда, тогда автозапуск будет указывать на правильное место.
-Можно также открыть `Package.swift` в Xcode и запустить оттуда.
+Move `build/KeyBindingApp.app` to Applications and launch it from there, so launch at login points to the right place.
+You can also open `Package.swift` in Xcode and run it from there.
 
-Если приложение скачано из GitHub Actions, macOS может не дать его открыть. Тогда:
-`xattr -dr com.apple.quarantine /Applications/KeyBindingApp.app` или правый клик → «Открыть».
+If the app was downloaded from GitHub Actions, macOS may refuse to open it. Then run
+`xattr -dr com.apple.quarantine /Applications/KeyBindingApp.app` or right-click → Open.
 
-## Разрешения
+`swift scripts/make-icon.swift` redraws the app icon into `Resources/AppIcon.icns`.
 
-При первом запуске macOS спросит два разрешения (Системные настройки → Конфиденциальность и безопасность):
+## Permissions
 
-| Разрешение | Зачем |
+On first launch macOS asks for two permissions (System Settings → Privacy & Security):
+
+| Permission | Why |
 |---|---|
-| Мониторинг ввода | Видеть коды клавиш и с какой клавиатуры они пришли |
-| Универсальный доступ | Подменять сочетания клавиш (комбинации) |
+| Input Monitoring | To see key codes and which keyboard they came from |
+| Accessibility | To replace key combinations (combos) |
 
-Простые переназначения через `hidutil` работают и без них.
+Plain remaps through `hidutil` work without either of them.
 
-Приложение подписывается ad hoc, а macOS привязывает разрешения к подписи. После каждой пересборки разрешения нужно
-выдать заново (удалить старую запись и включить новую). Чтобы этого избежать, подпишите своим сертификатом:
+The app is signed ad hoc, and macOS ties permissions to the signature. After every rebuild the permissions have to be
+granted again (remove the old entry and enable the new one). To avoid that, sign with your own certificate:
 `SIGN_IDENTITY="Apple Development: you@example.com" ./scripts/build-app.sh`.
 
-## Как это устроено
+## How it works
 
-| Файл | Что делает |
+| File | What it does |
 |---|---|
-| `Services/HIDMonitor.swift` | Читает клавиатуры через IOHIDManager, следит за подключением |
-| `Services/RemapEngine.swift` | Применяет переназначения командой `hidutil property --set '{"UserKeyMapping":[...]}'` |
-| `Services/ComboEngine.swift` | CGEventTap: ловит сочетание и отправляет вместо него другое |
-| `Services/LaunchAgent.swift` | `~/Library/LaunchAgents/com.keybindingapp.agent.plist`, запуск с `--background` |
-| `Model/KeyCatalog.swift` | Таблица HID-кодов, кодов macOS и названий клавиш |
-| `Views/*` | Интерфейс |
+| `Services/HIDMonitor.swift` | Reads keyboards through IOHIDManager and watches for connections |
+| `Services/RemapEngine.swift` | Applies remaps with `hidutil property --set '{"UserKeyMapping":[...]}'` |
+| `Services/ComboEngine.swift` | CGEventTap: catches a combination and sends another one instead |
+| `Services/LaunchAgent.swift` | `~/Library/LaunchAgents/com.keybindingapp.agent.plist`, launched with `--background` |
+| `Model/KeyCatalog.swift` | Table of HID codes, macOS key codes and key names |
+| `Views/*` | User interface |
+| `Debug/Snapshot.swift` | Debug builds only: renders a screen to PNG (`KB_SNAPSHOT=out.png KB_SCREEN=remaps .build/debug/KeyBindingApp`) |
 
-Отключить всё быстро можно переключателем в строке меню. Чтобы убрать системные переназначения вручную:
+To turn everything off quickly, use the switch in the menu bar. To clear the system remaps by hand:
 `hidutil property --set '{"UserKeyMapping":[]}'`.

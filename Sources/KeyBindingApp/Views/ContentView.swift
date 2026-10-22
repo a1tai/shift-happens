@@ -7,11 +7,11 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .keyboard: return "Клавиатура"
-        case .monitor: return "Монитор клавиш"
-        case .remaps: return "Переназначения"
-        case .combos: return "Комбинации"
-        case .settings: return "Настройки"
+        case .keyboard: return "Keyboard"
+        case .monitor: return "Key Monitor"
+        case .remaps: return "Remaps"
+        case .combos: return "Combos"
+        case .settings: return "Settings"
         }
     }
 
@@ -28,7 +28,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @EnvironmentObject private var state: AppState
-    @State private var selection: SidebarItem? = .keyboard
+    @State private var selection: SidebarItem? = DebugSnapshot.initialScreen ?? .keyboard
 
     var body: some View {
         NavigationSplitView {
@@ -38,7 +38,7 @@ struct ContentView: View {
                         Label(item.title, systemImage: item.icon).tag(item)
                     }
                 }
-                Section("Привязки") {
+                Section("Bindings") {
                     Label(SidebarItem.remaps.title, systemImage: SidebarItem.remaps.icon)
                         .badge(state.config.remaps.count)
                         .tag(SidebarItem.remaps)
@@ -78,7 +78,7 @@ private struct StatusFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Toggle(isOn: $state.config.enabled) {
-                Text(state.config.enabled ? "Привязки включены" : "Привязки выключены")
+                Text(state.config.enabled ? "Bindings on" : "Bindings off")
                     .font(.callout.weight(.medium))
             }
             .toggleStyle(.switch)
@@ -102,15 +102,15 @@ struct PermissionBanner: View {
         VStack(spacing: 0) {
             if !state.inputMonitoringGranted {
                 banner(
-                    text: "Нет доступа к «Мониторингу ввода»: приложение не видит коды клавиш и не замечает подключение клавиатуры.",
-                    button: "Открыть настройки",
+                    text: "No Input Monitoring access: the app can't see key codes or notice keyboards being connected.",
+                    button: "Open Settings",
                     action: Permissions.openInputMonitoring
                 )
             }
             if !state.accessibilityGranted && state.config.combos.contains(where: \.enabled) {
                 banner(
-                    text: "Нет доступа к «Универсальному доступу»: комбинации клавиш не работают.",
-                    button: "Разрешить",
+                    text: "No Accessibility access: combos don't work.",
+                    button: "Allow",
                     action: Permissions.openAccessibility
                 )
             }
@@ -129,4 +129,9 @@ struct PermissionBanner: View {
         .padding(.vertical, 10)
         .background(.orange.opacity(0.12))
     }
+}
+
+/// "1 remap", "3 remaps".
+func counted(_ count: Int, _ noun: String) -> String {
+    "\(count) \(noun)\(count == 1 ? "" : "s")"
 }

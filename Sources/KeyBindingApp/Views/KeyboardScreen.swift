@@ -11,37 +11,34 @@ struct KeyboardScreen: View {
     private var device: DeviceRef? { state.devices.first { $0.id == deviceID } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            GeometryReader { proxy in
-                let unit = min(proxy.size.width / KeyboardLayout.width, proxy.size.height / KeyboardLayout.height)
-                ZStack(alignment: .topLeading) {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                KeyboardGrid { unit in
                     ForEach(KeyboardLayout.keys) { cap in
                         KeyCapView(
                             cap: cap,
+                            unit: unit,
                             remap: remap(for: cap),
                             comboCount: comboCount(for: cap),
                             isPressed: state.pressedKeys.contains(cap.hid.hidutilValue),
                             isHovered: hovered == cap.usage
                         )
-                        .frame(width: cap.width * unit - 4, height: cap.height * unit - 4)
-                        .offset(x: cap.x * unit + 2, y: cap.y * unit + 2)
                         .onHover { hovered = $0 ? cap.usage : (hovered == cap.usage ? nil : hovered) }
                         .onTapGesture { edit(cap) }
                         .help(tooltip(for: cap))
                     }
                 }
-                .frame(width: KeyboardLayout.width * unit, height: KeyboardLayout.height * unit)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary.opacity(0.05)))
+                legend
+                detail
             }
-            .padding(16)
-            .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.05)))
-            .aspectRatio(KeyboardLayout.width / KeyboardLayout.height, contentMode: .fit)
-            legend
-            detail
-            Spacer(minLength: 0)
+            .padding(24)
         }
-        .padding(24)
+        .onAppear {
+            if DebugSnapshot.opensEditor, let esc = KeyboardLayout.keys.first { edit(esc) }
+        }
         .sheet(item: $editing) { remap in
             RemapEditor(remap: remap)
         }
@@ -50,13 +47,13 @@ struct KeyboardScreen: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Клавиатура").font(.largeTitle.bold())
-                Text("Нажмите на клавишу, чтобы назначить ей другую. Нажатия на клавиатуре подсвечиваются.")
+                Text("Keyboard").font(.largeTitle.bold())
+                Text("Click a key to make it act as another key. Keys you press light up.")
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Picker("Клавиатура", selection: $deviceID) {
-                Text("Все клавиатуры").tag(String?.none)
+            Picker("Keyboard", selection: $deviceID) {
+                Text("All keyboards").tag(String?.none)
                 if !state.devices.isEmpty { Divider() }
                 ForEach(state.devices) { device in
                     Text(device.name).tag(String?.some(device.id))
@@ -68,13 +65,15 @@ struct KeyboardScreen: View {
 
     private var legend: some View {
         HStack(spacing: 18) {
-            LegendItem(color: .accentColor, text: "Переназначена")
-            LegendItem(color: .purple, text: "Запускает комбинацию")
-            LegendItem(color: .green, text: "Нажата сейчас")
-            Spacer()
-            Text("\(state.config.remaps.count) переназначений · \(state.config.combos.count) комбинаций")
+            LegendItem(color: .accentColor, text: "Remapped")
+            LegendItem(color: .purple, text: "Triggers a combo")
+            LegendItem(color: .green, text: "Pressed now")
+            Spacer(minLength: 12)
+            Text(counted(state.config.remaps.count, "remap") + " · " + counted(state.config.combos.count, "combo"))
                 .foregroundStyle(.secondary)
         }
+        .lineLimit(1)
+        .fixedSize(horizontal: false, vertical: true)
         .font(.callout)
     }
 
@@ -103,7 +102,7 @@ struct KeyboardScreen: View {
             }
         } else {
             GroupBox {
-                Text("Наведите курсор на клавишу, чтобы увидеть её привязки.")
+                Text("Hover over a key to see its bindings.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -140,8 +139,53 @@ struct KeyboardScreen: View {
     }
 }
 
+/// Fills the available width with the keyboard and places each key cap by its position in key units.
+/// Keys never get smaller than `minUnit`; below that the keyboard scrolls horizontally instead.
+private struct KeyboardGrid<Content: View>: View {
+    static var minUnit: CGFloat { 24 }
+    @ViewBuilder let content: (CGFloat) -> Content
+    @State private var unit: CGFloat = 40
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            KeyCapLayout(unit: unit) { content(unit) }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .background(GeometryReader { proxy in
+                Color.clear
+                    .onAppear { update(proxy.size.width) }
+                    .onChange(of: proxy.size.width) { update($0) }
+            })
+    }
+
+    private func update(_ width: CGFloat) {
+        let fitted = max(Self.minUnit, (width / KeyboardLayout.width).rounded(.down))
+        if fitted != unit { unit = fitted }
+    }
+}
+
+/// Places subviews in the order of `KeyboardLayout.keys`, with a small gap between caps.
+private struct KeyCapLayout: Layout {
+    let unit: CGFloat
+    private let gap: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        CGSize(width: KeyboardLayout.width * unit, height: KeyboardLayout.height * unit)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (cap, subview) in zip(KeyboardLayout.keys, subviews) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + cap.x * unit + gap / 2, y: bounds.minY + cap.y * unit + gap / 2),
+                proposal: ProposedViewSize(width: cap.width * unit - gap, height: cap.height * unit - gap)
+            )
+        }
+    }
+}
+
 private struct KeyCapView: View {
     let cap: KeyCap
+    let unit: CGFloat
     let remap: KeyRemap?
     let comboCount: Int
     let isPressed: Bool
@@ -154,35 +198,36 @@ private struct KeyCapView: View {
         return nil
     }
 
+    private var fontSize: CGFloat { max(9, unit * 0.28) }
+
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+        ZStack {
+            RoundedRectangle(cornerRadius: unit * 0.16, style: .continuous)
                 .fill(tint.map { $0.opacity(isPressed ? 0.55 : 0.22) } ?? Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(0.18), radius: 0.5, y: 1)
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .shadow(color: .black.opacity(0.25), radius: 0.5, y: 1)
+            RoundedRectangle(cornerRadius: unit * 0.16, style: .continuous)
                 .strokeBorder(isHovered ? Color.accentColor : (tint ?? Color.primary.opacity(0.12)),
                               lineWidth: isHovered ? 2 : 1)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(spacing: unit * 0.04) {
                 Text(KeyCatalog.label(for: cap.hid))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: remap == nil ? fontSize : fontSize * 0.85, weight: .medium))
                     .strikethrough(remap?.enabled == true, color: .secondary)
                     .foregroundStyle(remap?.enabled == true ? .secondary : .primary)
-                Spacer(minLength: 0)
                 if let remap {
-                    Text("→ " + KeyCatalog.label(for: remap.to))
-                        .font(.system(size: 11, weight: .bold))
+                    Text(KeyCatalog.label(for: remap.to))
+                        .font(.system(size: fontSize, weight: .bold))
                         .foregroundStyle(remap.enabled ? Color.accentColor : .secondary)
                 }
             }
             .lineLimit(1)
-            .minimumScaleFactor(0.5)
-            .padding(5)
+            .minimumScaleFactor(0.45)
+            .padding(.horizontal, 3)
             if comboCount > 0 {
                 Image(systemName: "command")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: fontSize * 0.7, weight: .bold))
                     .foregroundStyle(.purple)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(4)
+                    .padding(unit * 0.08)
             }
         }
         .contentShape(Rectangle())

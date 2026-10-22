@@ -118,7 +118,7 @@ final class AppState: ObservableObject {
         let needed = config.enabled && config.combos.contains(where: \.enabled)
         if needed && accessibilityGranted {
             if !combos.isRunning && !combos.start() {
-                lastError = "Не удалось перехватывать клавиши. Проверьте разрешение «Универсальный доступ»."
+                lastError = "Couldn't intercept keys. Check the Accessibility permission."
             }
         } else if combos.isRunning {
             combos.stop()
@@ -172,7 +172,7 @@ final class AppState: ObservableObject {
         do {
             if on { try LaunchAgent.enable() } else { try LaunchAgent.disable() }
         } catch {
-            lastError = "Автозапуск: \(error.localizedDescription)"
+            lastError = "Launch at login: \(error.localizedDescription)"
         }
         launchAtLogin = LaunchAgent.isEnabled
     }

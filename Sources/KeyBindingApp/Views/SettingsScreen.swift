@@ -10,36 +10,36 @@ struct SettingsScreen: View {
 
     var body: some View {
         Form {
-            Section("Разрешения") {
+            Section("Permissions") {
                 PermissionRow(
-                    title: "Мониторинг ввода",
-                    details: "Чтобы видеть коды клавиш и узнавать, с какой клавиатуры они пришли.",
+                    title: "Input Monitoring",
+                    details: "To see key codes and which keyboard they came from.",
                     granted: state.inputMonitoringGranted,
                     action: Permissions.openInputMonitoring
                 )
                 PermissionRow(
-                    title: "Универсальный доступ",
-                    details: "Чтобы превращать одни сочетания клавиш в другие.",
+                    title: "Accessibility",
+                    details: "To turn one key combination into another.",
                     granted: state.accessibilityGranted,
                     action: Permissions.openAccessibility
                 )
             }
 
             Section {
-                Toggle("Запускать при входе в систему", isOn: Binding(
+                Toggle("Launch at login", isOn: Binding(
                     get: { state.launchAtLogin },
                     set: { state.setLaunchAtLogin($0) }
                 ))
-                Text("Приложение стартует в фоне, снова применяет все привязки и остаётся в строке меню. Перед включением переместите приложение в папку «Программы».")
+                Text("The app starts in the background, reapplies all bindings and stays in the menu bar. Move the app to the Applications folder before turning this on.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } header: {
-                Text("После перезагрузки")
+                Text("After restart")
             }
 
-            Section("Готовые наборы для Windows-клавиатуры") {
-                Picker("Клавиатура для переназначений", selection: $presetDeviceID) {
-                    Text("Все клавиатуры").tag(String?.none)
+            Section("Presets for Windows keyboards") {
+                Picker("Keyboard for remaps", selection: $presetDeviceID) {
+                    Text("All keyboards").tag(String?.none)
                     ForEach(state.devices) { Text($0.name).tag(String?.some($0.id)) }
                 }
                 ForEach(Preset.allCases) { preset in
@@ -49,9 +49,9 @@ struct SettingsScreen: View {
                             Text(preset.details).font(.callout).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button("Добавить") {
+                        Button("Add") {
                             preset.apply(to: state, device: state.devices.first { $0.id == presetDeviceID })
-                            message = "Набор «\(preset.title)» добавлен."
+                            message = "Added preset “\(preset.title)”."
                         }
                     }
                 }
@@ -60,12 +60,12 @@ struct SettingsScreen: View {
                 }
             }
 
-            Section("Резервная копия") {
+            Section("Backup") {
                 HStack {
-                    Button("Экспорт…", action: exportConfig)
-                    Button("Импорт…", action: importConfig)
+                    Button("Export…", action: exportConfig)
+                    Button("Import…", action: importConfig)
                     Spacer()
-                    Button("Показать файл настроек") {
+                    Button("Show settings file") {
                         NSWorkspace.shared.activateFileViewerSelecting([ConfigStore.fileURL])
                     }
                 }
@@ -76,14 +76,14 @@ struct SettingsScreen: View {
             }
 
             Section {
-                Button("Удалить все привязки…", role: .destructive) { confirmReset = true }
+                Button("Delete all bindings…", role: .destructive) { confirmReset = true }
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog("Удалить все переназначения и комбинации?", isPresented: $confirmReset) {
-            Button("Удалить всё", role: .destructive) { state.resetAll() }
+        .confirmationDialog("Delete all remaps and combos?", isPresented: $confirmReset) {
+            Button("Delete all", role: .destructive) { state.resetAll() }
         } message: {
-            Text("Клавиатура сразу вернётся к обычному поведению.")
+            Text("The keyboard immediately goes back to normal.")
         }
         .onAppear {
             // Most likely the user wants presets for the external (Windows) keyboard.
@@ -100,9 +100,9 @@ struct SettingsScreen: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try ConfigStore.encode(state.config).write(to: url, options: .atomic)
-            message = "Настройки сохранены в \(url.lastPathComponent)."
+            message = "Settings saved to \(url.lastPathComponent)."
         } catch {
-            message = "Не удалось сохранить: \(error.localizedDescription)"
+            message = "Couldn't save: \(error.localizedDescription)"
         }
     }
 
@@ -117,9 +117,9 @@ struct SettingsScreen: View {
             config.combos = imported.combos
             config.knownDevices = Array(Set(config.knownDevices + imported.knownDevices))
             state.config = config
-            message = "Импортировано: \(imported.remaps.count) переназначений, \(imported.combos.count) комбинаций."
+            message = "Imported \(counted(imported.remaps.count, "remap")) and \(counted(imported.combos.count, "combo"))."
         } catch {
-            message = "Не удалось прочитать файл: \(error.localizedDescription)"
+            message = "Couldn't read the file: \(error.localizedDescription)"
         }
     }
 }
@@ -141,7 +141,7 @@ private struct PermissionRow: View {
             }
             Spacer()
             if !granted {
-                Button("Открыть настройки", action: action)
+                Button("Open Settings", action: action)
             }
         }
     }

@@ -86,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.setActivationPolicy(.accessory)
             }
             self.window = window
+            DebugSnapshot.runIfRequested(window: window)
         }
         NSApp.setActivationPolicy(.regular)
         window?.makeKeyAndOrderFront(nil)

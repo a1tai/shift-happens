@@ -8,23 +8,23 @@ enum Preset: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .swapWinAlt: return "Поменять местами Win и Alt"
-        case .printScreen: return "Print Screen → снимок области экрана"
-        case .homeEnd: return "Home и End как в Windows"
-        case .ctrlShortcuts: return "Ctrl+C, V, X, Z, A, S, F как в Windows"
+        case .swapWinAlt: return "Swap Win and Alt"
+        case .printScreen: return "Print Screen → screenshot of an area"
+        case .homeEnd: return "Home and End like in Windows"
+        case .ctrlShortcuts: return "Ctrl+C, V, X, Z, A, S, F like in Windows"
         }
     }
 
     var details: String {
         switch self {
         case .swapWinAlt:
-            return "Alt будет ⌘ Command, а Win станет ⌥ Option, как расположено на клавиатуре Mac. Только для выбранной клавиатуры."
+            return "Alt becomes ⌘ Command and Win becomes ⌥ Option, matching the Mac key layout. Only for the selected keyboard."
         case .printScreen:
-            return "PrtSc отправляет ⌘⇧4, ⇧PrtSc отправляет ⌘⇧3 (весь экран)."
+            return "PrtSc sends ⌘⇧4, ⇧PrtSc sends ⌘⇧3 (whole screen)."
         case .homeEnd:
-            return "Home/End переходят в начало и конец строки, с ⇧ выделяют, с Ctrl идут в начало и конец документа."
+            return "Home/End go to the start and end of the line, select with ⇧, and go to the start and end of the document with Ctrl."
         case .ctrlShortcuts:
-            return "Ctrl+буква отправляет ⌘+буква. В Терминале Ctrl+C перестанет прерывать программы, пока набор включён."
+            return "Ctrl+letter sends ⌘+letter. While this preset is on, Ctrl+C no longer interrupts programs in Terminal."
         }
     }
 
@@ -41,23 +41,23 @@ enum Preset: String, CaseIterable, Identifiable {
                 ))
             }
         case .printScreen:
-            combo(state, 0x69, [], 0x15, [.command, .shift], "Снимок области")
-            combo(state, 0x69, .shift, 0x14, [.command, .shift], "Снимок экрана")
+            combo(state, 0x69, [], 0x15, [.command, .shift], "Screenshot of area")
+            combo(state, 0x69, .shift, 0x14, [.command, .shift], "Screenshot of screen")
         case .homeEnd:
-            combo(state, 0x73, [], 0x7B, .command, "Начало строки")
-            combo(state, 0x77, [], 0x7C, .command, "Конец строки")
-            combo(state, 0x73, .shift, 0x7B, [.command, .shift], "Выделить до начала строки")
-            combo(state, 0x77, .shift, 0x7C, [.command, .shift], "Выделить до конца строки")
-            combo(state, 0x73, .control, 0x7E, .command, "Начало документа")
-            combo(state, 0x77, .control, 0x7D, .command, "Конец документа")
+            combo(state, 0x73, [], 0x7B, .command, "Start of line")
+            combo(state, 0x77, [], 0x7C, .command, "End of line")
+            combo(state, 0x73, .shift, 0x7B, [.command, .shift], "Select to start of line")
+            combo(state, 0x77, .shift, 0x7C, [.command, .shift], "Select to end of line")
+            combo(state, 0x73, .control, 0x7E, .command, "Start of document")
+            combo(state, 0x77, .control, 0x7D, .command, "End of document")
         case .ctrlShortcuts:
-            let letters: [(UInt16, String)] = [(0x08, "Копировать"), (0x09, "Вставить"), (0x07, "Вырезать"),
-                                               (0x06, "Отменить"), (0x00, "Выделить всё"), (0x01, "Сохранить"),
-                                               (0x03, "Найти")]
+            let letters: [(UInt16, String)] = [(0x08, "Copy"), (0x09, "Paste"), (0x07, "Cut"),
+                                               (0x06, "Undo"), (0x00, "Select all"), (0x01, "Save"),
+                                               (0x03, "Find")]
             for (code, note) in letters {
                 combo(state, code, .control, code, .command, note)
             }
-            combo(state, 0x10, .control, 0x06, [.command, .shift], "Повторить")
+            combo(state, 0x10, .control, 0x06, [.command, .shift], "Redo")
         }
     }
 

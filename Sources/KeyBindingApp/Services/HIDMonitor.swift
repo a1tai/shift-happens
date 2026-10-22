@@ -103,7 +103,7 @@ final class HIDMonitor {
         let vendor = IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int ?? 0
         let product = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int ?? 0
         var name = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? ""
-        if name.isEmpty { name = String(format: "Клавиатура %04X:%04X", vendor, product) }
+        if name.isEmpty { name = String(format: "Keyboard %04X:%04X", vendor, product) }
         return DeviceRef(vendorID: vendor, productID: product, name: name)
     }
 

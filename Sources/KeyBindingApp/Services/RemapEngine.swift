@@ -88,7 +88,7 @@ enum RemapEngine {
             }
         } catch {
             result.ok = false
-            result.messages.append("Не удалось запустить hidutil: \(error.localizedDescription)")
+            result.messages.append("Couldn't run hidutil: \(error.localizedDescription)")
         }
     }
 }

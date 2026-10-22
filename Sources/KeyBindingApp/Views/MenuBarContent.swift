@@ -6,16 +6,17 @@ struct MenuBarContent: View {
     @EnvironmentObject private var state: AppState
 
     var body: some View {
-        Toggle("Привязки включены", isOn: $state.config.enabled)
-        Text("\(state.config.remaps.filter(\.enabled).count) переназначений · \(state.config.combos.filter(\.enabled).count) комбинаций")
+        Toggle("Bindings on", isOn: $state.config.enabled)
+        Text(counted(state.config.remaps.filter(\.enabled).count, "remap") + " · "
+             + counted(state.config.combos.filter(\.enabled).count, "combo"))
         if !state.inputMonitoringGranted || (!state.accessibilityGranted && !state.config.combos.isEmpty) {
-            Text("⚠︎ Не хватает разрешений, откройте окно")
+            Text("⚠︎ Missing permissions, open the window")
         }
         Divider()
-        Button("Открыть KeyBindingApp…") { AppDelegate.shared?.showMainWindow() }
+        Button("Open KeyBindingApp…") { AppDelegate.shared?.showMainWindow() }
             .keyboardShortcut("o")
         Divider()
-        Button("Выйти") { NSApp.terminate(nil) }
+        Button("Quit") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }

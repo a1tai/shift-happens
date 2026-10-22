@@ -20,15 +20,15 @@ struct KeyDef: Hashable, Identifiable {
     let category: Category
 
     enum Category: String, CaseIterable {
-        case letters = "Буквы"
-        case digits = "Цифры"
-        case symbols = "Символы"
-        case editing = "Управление"
-        case navigation = "Навигация"
-        case function = "F-клавиши"
-        case modifiers = "Модификаторы"
-        case keypad = "Цифровой блок"
-        case media = "Медиа и система"
+        case letters = "Letters"
+        case digits = "Digits"
+        case symbols = "Symbols"
+        case editing = "Editing"
+        case navigation = "Navigation"
+        case function = "Function keys"
+        case modifiers = "Modifiers"
+        case keypad = "Numpad"
+        case media = "Media and system"
     }
 
     var id: UInt64 { hid.hidutilValue }
@@ -60,7 +60,7 @@ enum KeyCatalog {
 
     /// Name of a macOS virtual key code, used for key combinations.
     static func name(forMacKeyCode code: UInt16) -> String {
-        key(forMacKeyCode: code)?.label ?? String(format: "Код %d", code)
+        key(forMacKeyCode: code)?.label ?? String(format: "Code %d", code)
     }
 
     /// Keys that make sense as a remap source (physical keyboard keys).
@@ -102,19 +102,19 @@ enum KeyCatalog {
         k(0x29, "Escape", "Esc", 0x35, .editing)
         k(0x2A, "Backspace", "⌫", 0x33, .editing)
         k(0x2B, "Tab", "Tab", 0x30, .editing)
-        k(0x2C, "Пробел", "Space", 0x31, .editing)
-        k(0x2D, "Минус -", "-", 0x1B, .symbols)
-        k(0x2E, "Равно =", "=", 0x18, .symbols)
-        k(0x2F, "Скобка [", "[", 0x21, .symbols)
-        k(0x30, "Скобка ]", "]", 0x1E, .symbols)
-        k(0x31, "Обратный слэш \\", "\\", 0x2A, .symbols)
+        k(0x2C, "Space", "Space", 0x31, .editing)
+        k(0x2D, "Minus -", "-", 0x1B, .symbols)
+        k(0x2E, "Equals =", "=", 0x18, .symbols)
+        k(0x2F, "Bracket [", "[", 0x21, .symbols)
+        k(0x30, "Bracket ]", "]", 0x1E, .symbols)
+        k(0x31, "Backslash \\", "\\", 0x2A, .symbols)
         k(0x32, "Non-US # (ISO)", "#", 0x2A, .symbols)
-        k(0x33, "Точка с запятой ;", ";", 0x29, .symbols)
-        k(0x34, "Апостроф '", "'", 0x27, .symbols)
-        k(0x35, "Гравис `", "`", 0x32, .symbols)
-        k(0x36, "Запятая ,", ",", 0x2B, .symbols)
-        k(0x37, "Точка .", ".", 0x2F, .symbols)
-        k(0x38, "Слэш /", "/", 0x2C, .symbols)
+        k(0x33, "Semicolon ;", ";", 0x29, .symbols)
+        k(0x34, "Apostrophe '", "'", 0x27, .symbols)
+        k(0x35, "Grave accent `", "`", 0x32, .symbols)
+        k(0x36, "Comma ,", ",", 0x2B, .symbols)
+        k(0x37, "Period .", ".", 0x2F, .symbols)
+        k(0x38, "Slash /", "/", 0x2C, .symbols)
         k(0x39, "Caps Lock", "Caps", 0x39, .modifiers)
 
         let fCodes: [UInt16] = [0x7A, 0x78, 0x63, 0x76, 0x60, 0x61, 0x62, 0x64, 0x65, 0x6D, 0x67, 0x6F]
@@ -129,56 +129,56 @@ enum KeyCatalog {
         k(0x4C, "Delete", "Del", 0x75, .navigation)
         k(0x4D, "End", "End", 0x77, .navigation)
         k(0x4E, "Page Down", "PgDn", 0x79, .navigation)
-        k(0x4F, "Стрелка вправо", "→", 0x7C, .navigation)
-        k(0x50, "Стрелка влево", "←", 0x7B, .navigation)
-        k(0x51, "Стрелка вниз", "↓", 0x7D, .navigation)
-        k(0x52, "Стрелка вверх", "↑", 0x7E, .navigation)
+        k(0x4F, "Right arrow", "→", 0x7C, .navigation)
+        k(0x50, "Left arrow", "←", 0x7B, .navigation)
+        k(0x51, "Down arrow", "↓", 0x7D, .navigation)
+        k(0x52, "Up arrow", "↑", 0x7E, .navigation)
 
         k(0x53, "Num Lock", "Num", 0x47, .keypad)
-        k(0x54, "Цифр. блок /", "/", 0x4B, .keypad)
-        k(0x55, "Цифр. блок *", "*", 0x43, .keypad)
-        k(0x56, "Цифр. блок -", "-", 0x4E, .keypad)
-        k(0x57, "Цифр. блок +", "+", 0x45, .keypad)
-        k(0x58, "Цифр. блок Enter", "Enter", 0x4C, .keypad)
+        k(0x54, "Numpad /", "/", 0x4B, .keypad)
+        k(0x55, "Numpad *", "*", 0x43, .keypad)
+        k(0x56, "Numpad -", "-", 0x4E, .keypad)
+        k(0x57, "Numpad +", "+", 0x45, .keypad)
+        k(0x58, "Numpad Enter", "Enter", 0x4C, .keypad)
         let kpCodes: [UInt16] = [0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5B, 0x5C]
-        for i in 0..<9 { k(0x59 + UInt32(i), "Цифр. блок \(i + 1)", "\(i + 1)", kpCodes[i], .keypad) }
-        k(0x62, "Цифр. блок 0", "0", 0x52, .keypad)
-        k(0x63, "Цифр. блок .", ".", 0x41, .keypad)
-        k(0x64, "Клавиша \\ у левого Shift (ISO)", "§", 0x0A, .symbols)
-        k(0x65, "Menu (контекстное меню)", "Menu", 0x6E, .editing)
+        for i in 0..<9 { k(0x59 + UInt32(i), "Numpad \(i + 1)", "\(i + 1)", kpCodes[i], .keypad) }
+        k(0x62, "Numpad 0", "0", 0x52, .keypad)
+        k(0x63, "Numpad .", ".", 0x41, .keypad)
+        k(0x64, "ISO \\ key next to left Shift", "§", 0x0A, .symbols)
+        k(0x65, "Menu (context menu)", "Menu", 0x6E, .editing)
         k(0x66, "Power", "Power", nil, .media)
-        k(0x67, "Цифр. блок =", "=", 0x51, .keypad)
+        k(0x67, "Numpad =", "=", 0x51, .keypad)
 
         let fHighCodes: [UInt16?] = [0x69, 0x6B, 0x71, 0x6A, 0x40, 0x4F, 0x50, 0x5A, nil, nil, nil, nil]
         for i in 0..<12 { k(0x68 + UInt32(i), "F\(i + 13)", "F\(i + 13)", fHighCodes[i], .function) }
 
-        k(0x7F, "Mute (клавиатура)", "Mute", 0x4A, .media)
-        k(0x80, "Громкость + (клавиатура)", "Vol+", 0x48, .media)
-        k(0x81, "Громкость − (клавиатура)", "Vol−", 0x49, .media)
+        k(0x7F, "Mute (keyboard)", "Mute", 0x4A, .media)
+        k(0x80, "Volume up (keyboard)", "Vol+", 0x48, .media)
+        k(0x81, "Volume down (keyboard)", "Vol−", 0x49, .media)
 
-        k(0xE0, "Левый Ctrl", "Ctrl", 0x3B, .modifiers)
-        k(0xE1, "Левый Shift", "Shift", 0x38, .modifiers)
-        k(0xE2, "Левый Alt (⌥ Option)", "Alt", 0x3A, .modifiers)
-        k(0xE3, "Левый Win (⌘ Command)", "Win", 0x37, .modifiers)
-        k(0xE4, "Правый Ctrl", "Ctrl", 0x3E, .modifiers)
-        k(0xE5, "Правый Shift", "Shift", 0x3C, .modifiers)
-        k(0xE6, "Правый Alt (⌥ Option)", "Alt", 0x3D, .modifiers)
-        k(0xE7, "Правый Win (⌘ Command)", "Win", 0x36, .modifiers)
+        k(0xE0, "Left Ctrl", "Ctrl", 0x3B, .modifiers)
+        k(0xE1, "Left Shift", "Shift", 0x38, .modifiers)
+        k(0xE2, "Left Alt (⌥ Option)", "Alt", 0x3A, .modifiers)
+        k(0xE3, "Left Win (⌘ Command)", "Win", 0x37, .modifiers)
+        k(0xE4, "Right Ctrl", "Ctrl", 0x3E, .modifiers)
+        k(0xE5, "Right Shift", "Shift", 0x3C, .modifiers)
+        k(0xE6, "Right Alt (⌥ Option)", "Alt", 0x3D, .modifiers)
+        k(0xE7, "Right Win (⌘ Command)", "Win", 0x36, .modifiers)
 
         // Consumer page: media keys on many Windows keyboards, and useful remap targets.
-        k(0xCD, "Воспроизведение / пауза", "⏯", nil, .media, page: HIDPage.consumer)
-        k(0xB5, "Следующий трек", "⏭", nil, .media, page: HIDPage.consumer)
-        k(0xB6, "Предыдущий трек", "⏮", nil, .media, page: HIDPage.consumer)
-        k(0xE2, "Выключить звук", "🔇", nil, .media, page: HIDPage.consumer)
-        k(0xE9, "Громче", "🔊", nil, .media, page: HIDPage.consumer)
-        k(0xEA, "Тише", "🔉", nil, .media, page: HIDPage.consumer)
-        k(0x6F, "Яркость +", "☀︎+", nil, .media, page: HIDPage.consumer)
-        k(0x70, "Яркость −", "☀︎−", nil, .media, page: HIDPage.consumer)
-        k(0xB8, "Извлечь", "⏏", nil, .media, page: HIDPage.consumer)
-        k(0x223, "Браузер: домой", "Home", nil, .media, page: HIDPage.consumer)
-        k(0x221, "Поиск", "🔍", nil, .media, page: HIDPage.consumer)
-        k(0x18A, "Почта", "✉︎", nil, .media, page: HIDPage.consumer)
-        k(0x192, "Калькулятор", "Calc", nil, .media, page: HIDPage.consumer)
+        k(0xCD, "Play / pause", "⏯", nil, .media, page: HIDPage.consumer)
+        k(0xB5, "Next track", "⏭", nil, .media, page: HIDPage.consumer)
+        k(0xB6, "Previous track", "⏮", nil, .media, page: HIDPage.consumer)
+        k(0xE2, "Mute", "🔇", nil, .media, page: HIDPage.consumer)
+        k(0xE9, "Volume up", "🔊", nil, .media, page: HIDPage.consumer)
+        k(0xEA, "Volume down", "🔉", nil, .media, page: HIDPage.consumer)
+        k(0x6F, "Brightness up", "☀︎+", nil, .media, page: HIDPage.consumer)
+        k(0x70, "Brightness down", "☀︎−", nil, .media, page: HIDPage.consumer)
+        k(0xB8, "Eject", "⏏", nil, .media, page: HIDPage.consumer)
+        k(0x223, "Browser home", "Home", nil, .media, page: HIDPage.consumer)
+        k(0x221, "Search", "🔍", nil, .media, page: HIDPage.consumer)
+        k(0x18A, "Mail", "✉︎", nil, .media, page: HIDPage.consumer)
+        k(0x192, "Calculator", "Calc", nil, .media, page: HIDPage.consumer)
 
         // Apple vendor page: the Fn / Globe key.
         k(0x03, "Fn (🌐 Globe)", "Fn", 0x3F, .modifiers, page: HIDPage.appleVendorTopCase)

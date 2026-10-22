@@ -9,11 +9,11 @@ struct RemapsScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(
-                title: "Переназначения",
-                subtitle: "Клавиша работает как другая клавиша во всех программах. Применяется системой (hidutil) и восстанавливается после перезагрузки."
+                title: "Remaps",
+                subtitle: "A key acts as another key in every app. Applied by the system (hidutil) and restored after restart."
             ) {
-                Button { showCommand.toggle() } label: { Label("Команда", systemImage: "terminal") }
-                    .help("Показать эквивалентную команду для Терминала")
+                Button { showCommand.toggle() } label: { Label("Command", systemImage: "terminal") }
+                    .help("Show the equivalent Terminal command")
                     .popover(isPresented: $showCommand) {
                         Text(RemapEngine.shellCommand(for: state.config.remaps))
                             .font(.caption.monospaced())
@@ -22,50 +22,50 @@ struct RemapsScreen: View {
                             .frame(maxWidth: 600)
                     }
                 Button(role: .destructive) { state.deleteRemaps(selection); selection = [] } label: {
-                    Label("Удалить", systemImage: "trash")
+                    Label("Delete", systemImage: "trash")
                 }
                 .disabled(selection.isEmpty)
                 Button {
                     let start = HIDUsage(page: HIDPage.keyboard, usage: 0x39)
                     editing = KeyRemap(from: start, to: start, device: state.devices.first)
                 } label: {
-                    Label("Добавить", systemImage: "plus")
+                    Label("Add", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
             }
 
             if state.config.remaps.isEmpty {
                 EmptyState(icon: "arrow.left.arrow.right",
-                           text: "Переназначений пока нет. Нажмите «Добавить» или кликните клавишу на экране «Клавиатура».")
+                           text: "No remaps yet. Click Add, or click a key on the Keyboard screen.")
             } else {
                 Table(state.config.remaps, selection: $selection) {
                     TableColumn("") { remap in
                         Toggle("", isOn: enabledBinding(remap.id)).labelsHidden()
                     }
                     .width(30)
-                    TableColumn("Клавиша") { remap in
+                    TableColumn("Key") { remap in
                         KeyBadge(text: KeyCatalog.name(for: remap.from))
                     }
-                    TableColumn("Работает как") { remap in
+                    TableColumn("Acts as") { remap in
                         HStack {
                             Image(systemName: "arrow.right").foregroundStyle(.secondary)
                             KeyBadge(text: KeyCatalog.name(for: remap.to), highlighted: remap.enabled)
                         }
                     }
-                    TableColumn("Клавиатура") { remap in
-                        Text(remap.device?.name ?? "Все клавиатуры")
+                    TableColumn("Keyboard") { remap in
+                        Text(remap.device?.name ?? "All keyboards")
                             .foregroundStyle(remap.device == nil ? .secondary : .primary)
                     }
-                    TableColumn("Коды") { remap in
+                    TableColumn("Codes") { remap in
                         Text("\(remap.from.hexDescription) → \(remap.to.hexDescription)")
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                     }
                 }
                 .contextMenu(forSelectionType: UUID.self) { ids in
-                    Button("Изменить…") { editing = state.config.remaps.first { ids.contains($0.id) } }
+                    Button("Edit…") { editing = state.config.remaps.first { ids.contains($0.id) } }
                         .disabled(ids.count != 1)
-                    Button("Удалить", role: .destructive) { state.deleteRemaps(ids) }
+                    Button("Delete", role: .destructive) { state.deleteRemaps(ids) }
                 } primaryAction: { ids in
                     editing = state.config.remaps.first { ids.contains($0.id) }
                 }
@@ -95,48 +95,48 @@ struct CombosScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(
-                title: "Комбинации",
-                subtitle: "Одно сочетание клавиш превращается в другое, например Insert → ⌘V. Работает, пока приложение запущено (оно живёт в строке меню)."
+                title: "Combos",
+                subtitle: "One key combination turns into another, for example Insert → ⌘V. Works while the app is running (it lives in the menu bar)."
             ) {
                 Button(role: .destructive) { state.deleteCombos(selection); selection = [] } label: {
-                    Label("Удалить", systemImage: "trash")
+                    Label("Delete", systemImage: "trash")
                 }
                 .disabled(selection.isEmpty)
                 Button {
                     let chord = KeyChord(keyCode: 0x72, modifiers: [])
                     editing = ComboBinding(trigger: chord, output: KeyChord(keyCode: 0x09, modifiers: .command))
                 } label: {
-                    Label("Добавить", systemImage: "plus")
+                    Label("Add", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
             }
 
             if state.config.combos.isEmpty {
                 EmptyState(icon: "command",
-                           text: "Комбинаций пока нет. Готовые наборы для Windows-клавиатуры есть в «Настройках».")
+                           text: "No combos yet. Presets for Windows keyboards are in Settings.")
             } else {
                 Table(state.config.combos, selection: $selection) {
                     TableColumn("") { combo in
                         Toggle("", isOn: enabledBinding(combo.id)).labelsHidden()
                     }
                     .width(30)
-                    TableColumn("Когда нажато") { combo in
+                    TableColumn("When pressed") { combo in
                         KeyBadge(text: combo.trigger.display)
                     }
-                    TableColumn("Отправить") { combo in
+                    TableColumn("Send") { combo in
                         HStack {
                             Image(systemName: "arrow.right").foregroundStyle(.secondary)
                             KeyBadge(text: combo.output.display, highlighted: combo.enabled)
                         }
                     }
-                    TableColumn("Заметка") { combo in
+                    TableColumn("Note") { combo in
                         Text(combo.note).foregroundStyle(.secondary)
                     }
                 }
                 .contextMenu(forSelectionType: UUID.self) { ids in
-                    Button("Изменить…") { editing = state.config.combos.first { ids.contains($0.id) } }
+                    Button("Edit…") { editing = state.config.combos.first { ids.contains($0.id) } }
                         .disabled(ids.count != 1)
-                    Button("Удалить", role: .destructive) { state.deleteCombos(ids) }
+                    Button("Delete", role: .destructive) { state.deleteCombos(ids) }
                 } primaryAction: { ids in
                     editing = state.config.combos.first { ids.contains($0.id) }
                 }
@@ -167,10 +167,10 @@ struct ScreenHeader<Actions: View>: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.largeTitle.bold())
-                Text(subtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(subtitle).foregroundStyle(.secondary)
             }
-            Spacer(minLength: 24)
-            HStack { actions() }
+            .frame(minWidth: 280, maxWidth: .infinity, alignment: .leading)
+            HStack { actions() }.fixedSize()
         }
     }
 }

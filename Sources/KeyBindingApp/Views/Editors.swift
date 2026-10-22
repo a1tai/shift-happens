@@ -16,10 +16,10 @@ struct RemapEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(isNew ? "Новое переназначение" : "Переназначение").font(.title2.bold())
+            Text(isNew ? "New Remap" : "Remap").font(.title2.bold())
 
             Form {
-                LabeledContent("Клавиша") {
+                LabeledContent("Key") {
                     HStack {
                         KeyPicker(selection: $draft.from, keys: KeyCatalog.sources)
                         CaptureButton { event in
@@ -29,19 +29,19 @@ struct RemapEditor: View {
                         }
                     }
                 }
-                LabeledContent("Работает как") {
+                LabeledContent("Acts as") {
                     HStack {
                         KeyPicker(selection: $draft.to, keys: KeyCatalog.targets)
                         CaptureButton { draft.to = $0.usage }
                     }
                 }
-                Picker("Для клавиатуры", selection: deviceSelection) {
-                    Text("Все клавиатуры (и встроенная)").tag(String?.none)
+                Picker("Keyboard", selection: deviceSelection) {
+                    Text("All keyboards (including built-in)").tag(String?.none)
                     ForEach(deviceOptions) { device in
                         Text(device.name).tag(String?.some(device.id))
                     }
                 }
-                Toggle("Включено", isOn: $draft.enabled)
+                Toggle("Enabled", isOn: $draft.enabled)
             }
             .formStyle(.grouped)
 
@@ -49,14 +49,14 @@ struct RemapEditor: View {
 
             HStack {
                 if !isNew {
-                    Button("Удалить", role: .destructive) {
+                    Button("Delete", role: .destructive) {
                         state.deleteRemaps([draft.id])
                         dismiss()
                     }
                 }
                 Spacer()
-                Button("Отмена") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Сохранить") {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
                     state.save(draft)
                     dismiss()
                 }
@@ -111,36 +111,36 @@ struct ComboEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(isNew ? "Новая комбинация" : "Комбинация").font(.title2.bold())
-            Text("Когда нажимаете первую комбинацию, приложение отправляет вместо неё вторую. Например Insert → ⌘V или ⌃C → ⌘C.")
+            Text(isNew ? "New Combo" : "Combo").font(.title2.bold())
+            Text("When you press the first combination, the app sends the second one instead. For example Insert → ⌘V or ⌃C → ⌘C.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Form {
-                Section("Когда нажато") { ChordEditor(chord: $draft.trigger) }
-                Section("Отправить") { ChordEditor(chord: $draft.output) }
+                Section("When pressed") { ChordEditor(chord: $draft.trigger) }
+                Section("Send") { ChordEditor(chord: $draft.output) }
                 Section {
-                    TextField("Заметка", text: $draft.note, prompt: Text("например «Вставить»"))
-                    Toggle("Включено", isOn: $draft.enabled)
+                    TextField("Note", text: $draft.note, prompt: Text("for example “Paste”"))
+                    Toggle("Enabled", isOn: $draft.enabled)
                 }
             }
             .formStyle(.grouped)
 
             if !state.accessibilityGranted {
-                Label("Комбинации заработают после разрешения «Универсальный доступ».", systemImage: "lock")
+                Label("Combos start working once Accessibility is allowed.", systemImage: "lock")
                     .foregroundStyle(.orange)
             }
 
             HStack {
                 if !isNew {
-                    Button("Удалить", role: .destructive) {
+                    Button("Delete", role: .destructive) {
                         state.deleteCombos([draft.id])
                         dismiss()
                     }
                 }
                 Spacer()
-                Button("Отмена") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Сохранить") {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") {
                     state.save(draft)
                     dismiss()
                     if !state.accessibilityGranted { Permissions.openAccessibility() }
@@ -166,14 +166,14 @@ struct ChordEditor: View {
             Button {
                 recorder == nil ? startRecording() : stopRecording()
             } label: {
-                Text(recorder == nil ? chord.display : "Нажмите сочетание…")
+                Text(recorder == nil ? chord.display : "Press a combination…")
                     .font(.system(.title3, design: .rounded).weight(.semibold))
                     .frame(minWidth: 150)
                     .padding(.vertical, 4)
             }
             .buttonStyle(.bordered)
             .tint(recorder == nil ? nil : .accentColor)
-            .help("Нажмите и затем нажмите сочетание клавиш")
+            .help("Click, then press a key combination")
 
             Spacer()
 
@@ -264,7 +264,7 @@ struct KeyPicker: View {
             }
         }
         .labelsHidden()
-        .frame(minWidth: 220)
+        .fixedSize()
     }
 }
 
@@ -275,7 +275,7 @@ struct CaptureButton: View {
     @State private var waiting = false
 
     var body: some View {
-        Button(waiting ? "Нажмите клавишу…" : "Нажать") {
+        Button(waiting ? "Press a key…" : "Record") {
             if waiting {
                 cancel()
             } else {
@@ -288,7 +288,7 @@ struct CaptureButton: View {
             }
         }
         .disabled(!state.inputMonitoringGranted)
-        .help(state.inputMonitoringGranted ? "Нажмите и затем нажмите клавишу на клавиатуре" : "Нужен доступ к «Мониторингу ввода»")
+        .help(state.inputMonitoringGranted ? "Click, then press a key on the keyboard" : "Needs Input Monitoring access")
         .onDisappear(perform: cancel)
     }
 
