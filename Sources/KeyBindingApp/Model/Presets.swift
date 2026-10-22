@@ -2,7 +2,7 @@ import Foundation
 
 /// Ready-made sets that make a Windows keyboard behave like a Mac one.
 enum Preset: String, CaseIterable, Identifiable {
-    case swapWinAlt, printScreen, homeEnd, ctrlShortcuts
+    case swapWinAlt, printScreen, homeEnd, ctrlShortcuts, mouseBackForward
 
     var id: String { rawValue }
 
@@ -12,6 +12,7 @@ enum Preset: String, CaseIterable, Identifiable {
         case .printScreen: return "Print Screen → screenshot of an area"
         case .homeEnd: return "Home and End like in Windows"
         case .ctrlShortcuts: return "Ctrl+C, V, X, Z, A, S, F like in Windows"
+        case .mouseBackForward: return "Mouse Back/Forward in Safari and Finder"
         }
     }
 
@@ -25,6 +26,8 @@ enum Preset: String, CaseIterable, Identifiable {
             return "Home/End go to the start and end of the line, select with ⇧, and go to the start and end of the document with Ctrl."
         case .ctrlShortcuts:
             return "Ctrl+letter sends ⌘+letter. While this preset is on, Ctrl+C no longer interrupts programs in Terminal."
+        case .mouseBackForward:
+            return "Mouse button 4 sends ⌘[ (back) and button 5 sends ⌘] (forward), which Safari and Finder understand."
         }
     }
 
@@ -58,6 +61,9 @@ enum Preset: String, CaseIterable, Identifiable {
                 combo(state, code, .control, code, .command, note)
             }
             combo(state, 0x10, .control, 0x06, [.command, .shift], "Redo")
+        case .mouseBackForward:
+            state.save(ComboBinding(trigger: .mouse(3), output: KeyChord(keyCode: 0x21, modifiers: .command), note: "Back"))
+            state.save(ComboBinding(trigger: .mouse(4), output: KeyChord(keyCode: 0x1E, modifiers: .command), note: "Forward"))
         }
     }
 

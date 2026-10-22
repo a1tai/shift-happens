@@ -116,12 +116,38 @@ struct ModifierSet: OptionSet, Codable, Hashable {
     }
 }
 
-/// A key (macOS virtual key code) plus modifiers.
+/// A key (macOS virtual key code) plus modifiers, or a mouse button plus modifiers (combo triggers).
 struct KeyChord: Codable, Hashable {
     var keyCode: UInt16
     var modifiers: ModifierSet
+    /// Set for a mouse button trigger: the CGEvent button number (2 middle, 3 back, 4 forward, …).
+    /// Left and right (0 and 1) are never used. Missing in older configs.
+    var mouseButton: Int? = nil
 
-    var display: String { modifiers.symbols + (KeyChord.modifierSymbols[keyCode] ?? KeyCatalog.name(forMacKeyCode: keyCode)) }
+    init(keyCode: UInt16, modifiers: ModifierSet, mouseButton: Int? = nil) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+        self.mouseButton = mouseButton
+    }
+
+    static func mouse(_ button: Int, modifiers: ModifierSet = []) -> KeyChord {
+        KeyChord(keyCode: 0, modifiers: modifiers, mouseButton: button)
+    }
+
+    /// "Middle button", "Mouse 4 (Back)", "Mouse 5 (Forward)", "Mouse 6".
+    static func mouseName(_ button: Int) -> String {
+        switch button {
+        case 2: return "Middle button"
+        case 3: return "Mouse 4 (Back)"
+        case 4: return "Mouse 5 (Forward)"
+        default: return "Mouse \(button + 1)"
+        }
+    }
+
+    var display: String {
+        if let mouseButton { return modifiers.symbols + KeyChord.mouseName(mouseButton) }
+        return modifiers.symbols + (KeyChord.modifierSymbols[keyCode] ?? KeyCatalog.name(forMacKeyCode: keyCode))
+    }
 
     /// Modifier keys as keys (macro steps), shown the Mac way; left and right look the same.
     static let modifierSymbols: [UInt16: String] = [

@@ -3,7 +3,7 @@ import Carbon
 import Combine
 import Foundation
 
-/// One line of the key monitor: what the keyboard sent and what macOS made of it.
+/// The key monitor's last press: what the keyboard sent and what macOS made of it.
 struct KeyLogEntry: Identifiable, Equatable {
     let id = UUID()
     var hid: HIDKeyEvent?
@@ -29,17 +29,10 @@ final class AppState: NSObject, ObservableObject {
     }
 
     @Published private(set) var devices: [DeviceRef] = []
-    /// Key presses seen by the Key Monitor. Memory only, and only while that screen is being looked at.
-    @Published private(set) var log: [KeyLogEntry] = []
+    /// The last key press, for the Key Monitor. Only one, memory only, and only while that screen is looked at.
+    @Published private(set) var lastKey: KeyLogEntry?
     /// Keys held down right now, for the Keyboard screen. Only tracked while it is being looked at.
     @Published private(set) var pressedKeys: Set<UInt64> = []
-    /// Key Monitor keeps a list of recent presses instead of just the last one. Only this choice is saved.
-    @Published var keepsKeyHistory = UserDefaults.standard.bool(forKey: AppState.keepsKeyHistoryKey) {
-        didSet {
-            UserDefaults.standard.set(keepsKeyHistory, forKey: Self.keepsKeyHistoryKey)
-            trimLog()
-        }
-    }
     @Published private(set) var inputMonitoringGranted = HIDMonitor.hasAccess
     @Published private(set) var accessibilityGranted = ComboEngine.hasAccess
     @Published private(set) var launchAtLogin = LaunchAgent.isEnabled
@@ -61,6 +54,8 @@ final class AppState: NSObject, ObservableObject {
     private var chordTracker = ChordTracker()
     /// While set, every raw key press and release (after remaps) goes to the macro recorder.
     var macroCaptureHandler: ((HIDUsage, Bool, Date) -> Void)?
+    /// The shortcut recorder also takes a click of an extra mouse button (combo triggers).
+    var chordCaptureAcceptsMouse = false
 
     /// The one recorder listening right now (a Record button, the shortcut or the macro recorder).
     /// Starting another recorder stops this one first.
@@ -86,8 +81,6 @@ final class AppState: NSObject, ObservableObject {
     /// macOS's Accessibility dialog is triggered at most once per launch, not on every check.
     private var askedForAccessibility = false
     private static let onboardingDoneKey = "onboardingDone"
-    private static let keepsKeyHistoryKey = "keyMonitorKeepsHistory"
-    private static let historyLimit = 50
 
     /// Which key-showing screens are open, and whether the window is actually in front of the user.
     private var monitorScreenOpen = false
@@ -102,6 +95,8 @@ final class AppState: NSObject, ObservableObject {
     // MARK: - Lifecycle
 
     func start() {
+        // The key history option is gone; drop its stored setting.
+        UserDefaults.standard.removeObject(forKey: "keyMonitorKeepsHistory")
         LaunchAgent.refreshIfNeeded()
 
         hid.onKey = { [weak self] event in self?.handle(hidEvent: event) }
@@ -135,7 +130,7 @@ final class AppState: NSObject, ObservableObject {
         }
         hid.start()
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .otherMouseDown]) { [weak self] event in
             guard let self else { return event }
             return self.handle(localEvent: event)
         }
@@ -348,7 +343,6 @@ final class AppState: NSObject, ObservableObject {
         return config.remaps.filter { $0.device == nil || $0.device?.matches(device) == true }
     }
 
-    func clearLog() { log.removeAll() }
 
     // MARK: - Recording
 
@@ -370,6 +364,7 @@ final class AppState: NSObject, ObservableObject {
         captureHandler = nil
         chordCaptureHandler = nil
         macroCaptureHandler = nil
+        chordCaptureAcceptsMouse = false
         swallowLocalKeys -= 1
         combos.isPaused = false
         SystemShortcuts.restore()
@@ -402,14 +397,10 @@ final class AppState: NSObject, ObservableObject {
 
     /// Drops everything about key presses as soon as nobody can see it.
     private func forgetKeysNoLongerViewed() {
-        if !isMonitorViewed && !log.isEmpty { log.removeAll() }
+        if !isMonitorViewed && lastKey != nil { lastKey = nil }
         if !isKeyboardViewed && !pressedKeys.isEmpty { pressedKeys.removeAll() }
     }
 
-    private func trimLog() {
-        let limit = keepsKeyHistory ? Self.historyLimit : 1
-        if log.count > limit { log.removeLast(log.count - limit) }
-    }
 
     // MARK: - Key events
 
@@ -451,8 +442,7 @@ final class AppState: NSObject, ObservableObject {
             return
         }
         guard isMonitorViewed else { return }
-        log.insert(KeyLogEntry(hid: hidEvent, time: hidEvent.time), at: 0)
-        trimLog()
+        lastKey = KeyLogEntry(hid: hidEvent, time: hidEvent.time)
         // Redraw once it is clear whether macOS produced a key event for this press.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.objectWillChange.send() }
     }
@@ -462,6 +452,15 @@ final class AppState: NSObject, ObservableObject {
            Date().timeIntervalSince(ended) < 0.5 {
             recordingEndedAt = nil
             return nil
+        }
+        if event.type == .otherMouseDown {
+            // A trigger recorder takes the middle, back or forward button (never left or right clicks).
+            if activeRecorder != nil, chordCaptureAcceptsMouse, event.buttonNumber >= 2, let handler = chordCaptureHandler {
+                chordCaptureHandler = nil
+                handler(.mouse(event.buttonNumber, modifiers: ModifierSet(nsFlags: event.modifierFlags).subtracting(.function)))
+                return nil
+            }
+            return event
         }
         if activeRecorder != nil {
             // Without Input Monitoring the shortcut recorder only has the key presses that reach this window.
@@ -473,7 +472,7 @@ final class AppState: NSObject, ObservableObject {
             // Nothing typed while recording reaches the window, not even ⌘ shortcuts.
             return event.type == .keyDown ? nil : event
         }
-        if isMonitorViewed { addToLog(event) }
+        if isMonitorViewed { updateLastKey(event) }
         if swallowLocalKeys > 0, event.type == .keyDown, !event.modifierFlags.contains(.command) {
             return nil
         }
@@ -481,21 +480,19 @@ final class AppState: NSObject, ObservableObject {
     }
 
     /// Adds what macOS made of a key press to the monitor's entry for it.
-    private func addToLog(_ event: NSEvent) {
+    private func updateLastKey(_ event: NSEvent) {
         let isModifier = event.type == .flagsChanged
         let modifiers = ModifierSet(nsFlags: event.modifierFlags)
         // Attach what macOS produced to the raw press that just happened, if there is one.
-        if let index = log.firstIndex(where: { $0.macKeyCode == nil }),
-           index == 0, Date().timeIntervalSince(log[index].time) < 0.4 {
-            log[index].macKeyCode = event.keyCode
-            log[index].characters = isModifier ? nil : event.characters
-            log[index].macModifiers = modifiers
+        if var entry = lastKey, entry.macKeyCode == nil, Date().timeIntervalSince(entry.time) < 0.4 {
+            entry.macKeyCode = event.keyCode
+            entry.characters = isModifier ? nil : event.characters
+            entry.macModifiers = modifiers
+            lastKey = entry
         } else if !inputMonitoringGranted {
             // Without Input Monitoring this is the only source of information.
-            log.insert(KeyLogEntry(hid: nil, macKeyCode: event.keyCode,
-                                   characters: isModifier ? nil : event.characters,
-                                   macModifiers: modifiers, time: Date()), at: 0)
-            trimLog()
+            lastKey = KeyLogEntry(hid: nil, macKeyCode: event.keyCode, characters: isModifier ? nil : event.characters,
+                                  macModifiers: modifiers, time: Date())
         }
     }
 }

@@ -148,7 +148,7 @@ struct KeyboardScreen: View {
         // Combos are matched by the key code macOS produces, which a remap may change.
         let effective = remap(for: cap).flatMap { $0.enabled ? $0.to : nil } ?? cap.hid
         guard let code = KeyCatalog.key(for: effective)?.macKeyCode else { return [] }
-        return state.config.combos.filter { $0.trigger.keyCode == code }
+        return state.config.combos.filter { $0.trigger.mouseButton == nil && $0.trigger.keyCode == code }
     }
 
     private func comboCount(for cap: KeyCap) -> Int { combos(for: cap).count }

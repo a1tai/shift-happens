@@ -282,6 +282,21 @@ enum DebugSnapshot {
         check("Esc after a recording does not reach the window", app.handle(localEvent: keyDown(0x35, "\u{1b}")) == nil)
         check("later keys reach the window again", app.handle(localEvent: keyDown(0x24, "\r")) != nil)
 
+        // Mouse button triggers.
+        var back = ComboBinding(trigger: .mouse(3), output: KeyChord(keyCode: 0x21, modifiers: .command))
+        back.note = "Back"
+        let keyA = ComboBinding(trigger: KeyChord(keyCode: 0x00, modifiers: []), output: KeyChord(keyCode: 0x0B, modifiers: []))
+        let combos = [keyA, back]
+        check("mouse 4 matches its combo", ComboEngine.binding(in: combos, keyCode: nil, mouseButton: 3, modifiers: [])?.id == back.id)
+        check("mouse trigger ignores other buttons", ComboEngine.binding(in: combos, keyCode: nil, mouseButton: 4, modifiers: []) == nil)
+        check("mouse trigger needs the same modifiers", ComboEngine.binding(in: combos, keyCode: nil, mouseButton: 3, modifiers: .command) == nil)
+        check("key A doesn't fire the mouse combo (both keyCode 0)",
+              ComboEngine.binding(in: combos, keyCode: 0x00, mouseButton: nil, modifiers: [])?.id == keyA.id)
+        let mouseJSON = (try? JSONEncoder().encode(back)).flatMap { try? JSONDecoder().decode(ComboBinding.self, from: $0) }
+        check("mouse trigger round-trip", mouseJSON == back && mouseJSON?.trigger.display == "Mouse 4 (Back)")
+        let oldChord = #"{"keyCode":105,"modifiers":0}"#
+        check("old triggers have no mouse button", (try? JSONDecoder().decode(KeyChord.self, from: Data(oldChord.utf8)))?.mouseButton == nil)
+
         // Config files from before the layout fixer still load.
         let old = #"{"enabled":true,"remaps":[],"combos":[],"knownDevices":[]}"#
         let decoded = try? JSONDecoder().decode(AppConfig.self, from: Data(old.utf8))

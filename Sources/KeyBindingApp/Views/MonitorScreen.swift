@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Live view of key presses: the raw code from the keyboard and what macOS turned it into.
-/// Presses exist only in memory while this screen is on screen; nothing is saved.
+/// Only the last press exists, in memory, while this screen is on screen; nothing is saved.
 struct MonitorScreen: View {
     @EnvironmentObject private var state: AppState
     @State private var editingRemap: KeyRemap?
@@ -13,12 +13,12 @@ struct MonitorScreen: View {
                 Text("Key Monitor").font(.largeTitle.bold())
                 Text("Press any key on the keyboard. While this screen is open, key presses don't reach other fields in the app.")
                     .foregroundStyle(.secondary)
-                Label("Nothing is saved. History is cleared when you leave this screen.", systemImage: "lock.shield")
+                Label("Only the last key is shown. Nothing is saved, and it is cleared when you leave this screen.", systemImage: "lock.shield")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
-            if let last = state.log.first {
+            if let last = state.lastKey {
                 LastKeyCard(entry: last, onRemap: { remap(last) }, onCombo: { combo(last) })
             } else {
                 GroupBox {
@@ -30,20 +30,7 @@ struct MonitorScreen: View {
                 }
             }
 
-            HStack {
-                Toggle("Keep history", isOn: $state.keepsKeyHistory)
-                    .toggleStyle(.switch)
-                    .help("List the last \(50) presses instead of only the last one. Kept in memory while you look at this screen.")
-                Spacer()
-                if state.keepsKeyHistory {
-                    Button("Clear", action: state.clearLog).disabled(state.log.isEmpty)
-                }
-            }
-            if state.keepsKeyHistory {
-                historyTable
-            } else {
-                Spacer(minLength: 0)
-            }
+            Spacer(minLength: 0)
         }
         .padding(24)
         .onAppear {
@@ -56,39 +43,6 @@ struct MonitorScreen: View {
         }
         .sheet(item: $editingRemap) { RemapEditor(remap: $0) }
         .sheet(item: $editingCombo) { ComboEditor(combo: $0) }
-    }
-
-    private var historyTable: some View {
-        Table(state.log) {
-            TableColumn("Time") { entry in
-                Text(entry.time, format: .dateTime.hour().minute().second())
-                    .foregroundStyle(.secondary)
-            }
-            .width(70)
-            TableColumn("Key") { entry in
-                Text(entry.keyName)
-            }
-            TableColumn("HID code") { entry in
-                Text(entry.hid.map { $0.usage.hexDescription } ?? "—").font(.body.monospaced())
-            }
-            .width(110)
-            TableColumn("macOS code") { entry in
-                if let code = entry.macKeyCode {
-                    Text("\(code) (0x\(String(code, radix: 16, uppercase: true)))").font(.body.monospaced())
-                } else {
-                    Text(entry.macIgnoredIt ? "not received" : "—")
-                        .foregroundStyle(entry.macIgnoredIt ? Color.orange : .secondary)
-                }
-            }
-            .width(110)
-            TableColumn("Character") { entry in
-                Text(entry.symbol).font(.body.monospaced())
-            }
-            .width(70)
-            TableColumn("Keyboard") { entry in
-                Text(entry.hid?.device.name ?? "—").foregroundStyle(.secondary)
-            }
-        }
     }
 
     private func remap(_ entry: KeyLogEntry) {

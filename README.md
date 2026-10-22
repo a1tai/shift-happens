@@ -9,7 +9,7 @@ Bindings are saved and restored after a restart.
 
 - **Keyboard.** A drawn MacBook keyboard, or a full-size Windows keyboard via the Mac | Windows switch (both show the same remaps): remapped keys are highlighted in blue and labeled with their new value,
   keys with combos are marked in purple, and keys you are pressing light up green. Click a key to open the editor.
-- **Key Monitor.** For each key press: the HID code (what the keyboard sends), the macOS key code, the character and the keyboard name.
+- **Key Monitor.** For the last key press: the HID code (what the keyboard sends), the macOS key code, the character and the keyboard name.
   If the keyboard sent a key that macOS never received, you see it right away.
 - **Remaps** (key → key) through the system `hidutil`. Apply them to every keyboard or only to the Windows keyboard,
   so the MacBook's built-in keyboard stays unchanged. Targets include media keys, volume, brightness and Fn.
@@ -21,6 +21,8 @@ Bindings are saved and restored after a restart.
   The last word is retyped in the next layout and the layout switches; with a selection, the selected text is converted;
   with nothing typed, the layout just switches. Press again to undo. Works with three or more layouts and dead keys.
   Off by default; can also show the current layout (En / Ру) in the menu bar.
+- **Mouse buttons as triggers**: a combo can fire on the middle, back or forward mouse button (optionally with
+  modifiers), for example Mouse 4 → ⌘[ so the Back button works in Safari and Finder. Left and right clicks are never touched.
 - **Presets** in Settings: swap Win and Alt, Print Screen, Home/End like in Windows, Ctrl shortcuts like in Windows.
 - **After restart** the app starts in the background (LaunchAgent), reapplies the bindings and lives in the menu bar.
   Bindings are reapplied whenever a keyboard is connected.
@@ -66,9 +68,8 @@ granted again: System Settings may still show the old entry as on. **Reset and A
 
 Nothing you type is recorded, saved or sent anywhere.
 
-- **Key Monitor** shows presses only while its screen is visible and the app is in front. History is off by default;
-  when on, it keeps the last 50 presses in memory and drops them as soon as you leave the screen, close or minimize
-  the window, or switch to another app. Only the on/off choice is saved.
+- **Key Monitor** shows only the last key press, only while its screen is visible and the app is in front. There is
+  no history. It is dropped as soon as you leave the screen, close or minimize the window, or switch to another app.
 - **Keyboard screen** highlights held keys only while it is visible. Otherwise key presses from the keyboard are ignored
   as soon as they arrive; "press a key" buttons receive just the one press they ask for.
 - **Layout Fixer** has to remember the word being typed to retype it. It holds only that word in memory and forgets it on

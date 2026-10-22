@@ -127,7 +127,7 @@ struct ComboEditor: View {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 12) {
                 GridRow {
                     Text("When pressed").gridColumnAlignment(.trailing)
-                    ChordEditor(chord: $draft.trigger)
+                    ChordEditor(chord: $draft.trigger, allowsMouseButtons: true)
                 }
                 GridRow {
                     Text("Send")
@@ -203,6 +203,8 @@ struct ChordEditor: View {
     @Binding var chord: KeyChord
     /// Lists Shift, Control and the like as keys too (macro steps that hold a modifier).
     var allowsModifierKeys = false
+    /// Accepts a mouse button (middle, back, forward) instead of a key: combo triggers.
+    var allowsMouseButtons = false
     var compact = false
     @State private var recorderID = UUID()
 
@@ -213,10 +215,20 @@ struct ChordEditor: View {
             KeyFieldShell(text: chord.display, isRecording: isRecording, minWidth: compact ? 120 : 160,
                           onClick: { isRecording ? stopRecording() : startRecording() }) {
                 KeyMenuItems(keys: allowsModifierKeys ? KeyCatalog.chordKeysWithModifiers : KeyCatalog.chordKeys) { key in
-                    if let code = key.macKeyCode { chord.keyCode = code }
+                    if let code = key.macKeyCode { chord = KeyChord(keyCode: code, modifiers: chord.modifiers) }
+                }
+                if allowsMouseButtons {
+                    Menu("Mouse Buttons") {
+                        ForEach(2..<8, id: \.self) { button in
+                            Button(KeyChord.mouseName(button)) { chord = .mouse(button, modifiers: chord.modifiers) }
+                        }
+                    }
                 }
             }
-            .help(isRecording ? "Press the shortcut. Esc cancels." : "Click to record a shortcut, or pick a key with the arrow")
+            .help(isRecording
+                  ? (allowsMouseButtons ? "Press the shortcut, or click a mouse's middle, back or forward button. Esc cancels."
+                                        : "Press the shortcut. Esc cancels.")
+                  : "Click to record a shortcut, or pick a key with the arrow")
             if !compact { Spacer(minLength: 8) }
             HStack(spacing: 3) {
                 ForEach(ModifierToggle.all) { item in
@@ -244,6 +256,7 @@ struct ChordEditor: View {
     /// only key presses that reach this window can be recorded.
     private func startRecording() {
         state.startRecording(recorderID)
+        state.chordCaptureAcceptsMouse = allowsMouseButtons
         state.chordCaptureHandler = { recorded in
             chord = recorded
             stopRecording()

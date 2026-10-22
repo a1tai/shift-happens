@@ -20,6 +20,7 @@ final class ComboEngine {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var swallowedKeyUps = Set<UInt16>()
+    private var swallowedMouseUps = Set<Int>()
     private let source = CGEventSource(stateID: .privateState)
     let macros = MacroPlayer()
 
@@ -28,7 +29,9 @@ final class ComboEngine {
     @discardableResult
     func start() -> Bool {
         guard tap == nil else { return true }
+        // Keys, and the extra mouse buttons (never left or right clicks).
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+            | (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
         let context = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -60,6 +63,7 @@ final class ComboEngine {
         tap = nil
         runLoopSource = nil
         swallowedKeyUps.removeAll()
+        swallowedMouseUps.removeAll()
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -68,7 +72,7 @@ final class ComboEngine {
             // macOS turns slow taps off; turn it back on.
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
-        case .keyDown, .keyUp:
+        case .keyDown, .keyUp, .otherMouseDown, .otherMouseUp:
             break
         default:
             return Unmanaged.passUnretained(event)
@@ -78,16 +82,18 @@ final class ComboEngine {
             return Unmanaged.passUnretained(event)
         }
 
+        if type == .otherMouseDown || type == .otherMouseUp {
+            return handleMouse(down: type == .otherMouseDown, event: event)
+        }
+
         let keyCode = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
 
         if type == .keyUp {
             return swallowedKeyUps.remove(keyCode) != nil ? nil : Unmanaged.passUnretained(event)
         }
 
-        let modifiers = ModifierSet(cgFlags: event.flags).subtracting(.function)
-        guard let binding = bindings.first(where: {
-            $0.enabled && $0.trigger.keyCode == keyCode && $0.trigger.modifiers.subtracting(.function) == modifiers
-        }) else {
+        let modifiers = ModifierSet(cgFlags: event.flags)
+        guard let binding = Self.binding(in: bindings, keyCode: keyCode, mouseButton: nil, modifiers: modifiers) else {
             return Unmanaged.passUnretained(event)
         }
 
@@ -102,6 +108,33 @@ final class ComboEngine {
             post(binding.output)
         }
         return nil
+    }
+
+    /// A bound mouse button: its press fires the combo, and both press and release are swallowed.
+    private func handleMouse(down: Bool, event: CGEvent) -> Unmanaged<CGEvent>? {
+        let button = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+        guard button >= 2 else { return Unmanaged.passUnretained(event) }
+        if !down {
+            return swallowedMouseUps.remove(button) != nil ? nil : Unmanaged.passUnretained(event)
+        }
+        guard let binding = Self.binding(in: bindings, keyCode: nil, mouseButton: button,
+                                         modifiers: ModifierSet(cgFlags: event.flags)) else {
+            return Unmanaged.passUnretained(event)
+        }
+        swallowedMouseUps.insert(button)
+        if binding.isMacro { macros.play(binding) } else { post(binding.output) }
+        return nil
+    }
+
+    /// The enabled combo whose trigger is this key or mouse button with exactly these modifiers (fn ignored).
+    static func binding(in bindings: [ComboBinding], keyCode: UInt16?, mouseButton: Int?,
+                        modifiers: ModifierSet) -> ComboBinding? {
+        let mods = modifiers.subtracting(.function)
+        return bindings.first { combo in
+            guard combo.enabled, combo.trigger.modifiers.subtracting(.function) == mods else { return false }
+            if let mouseButton { return combo.trigger.mouseButton == mouseButton }
+            return combo.trigger.mouseButton == nil && combo.trigger.keyCode == keyCode
+        }
     }
 
     private func post(_ chord: KeyChord) {
