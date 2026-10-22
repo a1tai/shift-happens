@@ -310,7 +310,7 @@ final class AppState: NSObject, ObservableObject {
     }
 
     /// The keyboard a new remap or preset is for by default: an external one if connected.
-    var defaultKeyboard: DeviceRef? { devices.first { !$0.isBuiltIn } }
+    var defaultKeyboard: DeviceRef? { devices.first { !$0.isBuiltIn && !$0.isMouse } }
 
     /// Remaps that apply to `device` (nil = show every remap).
     func remaps(for device: DeviceRef?) -> [KeyRemap] {

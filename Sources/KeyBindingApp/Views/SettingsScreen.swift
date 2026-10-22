@@ -37,7 +37,7 @@ struct SettingsScreen: View {
             Section("Presets for Windows keyboards") {
                 Picker("Keyboard for remaps", selection: $presetDeviceID) {
                     Text("All keyboards").tag(String?.none)
-                    ForEach(state.devices) { Text(state.displayName(of: $0)).tag(String?.some($0.id)) }
+                    DevicePickerItems(devices: state.devices)
                 }
                 ForEach(Preset.allCases) { preset in
                     HStack(alignment: .top) {

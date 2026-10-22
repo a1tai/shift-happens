@@ -21,12 +21,15 @@ struct DeviceRef: Codable, Hashable, Identifiable {
     /// The MacBook's own keyboard. It reports vendor and product 0, like other built-in HID parts
     /// (the headphone jack's buttons), so it is identified by this flag instead.
     var isBuiltIn = false
+    /// A mouse whose extra buttons send key presses through a keyboard interface (e.g. Logitech M720).
+    var isMouse = false
 
-    init(vendorID: Int, productID: Int, name: String, isBuiltIn: Bool = false) {
+    init(vendorID: Int, productID: Int, name: String, isBuiltIn: Bool = false, isMouse: Bool = false) {
         self.vendorID = vendorID
         self.productID = productID
         self.name = name
         self.isBuiltIn = isBuiltIn
+        self.isMouse = isMouse
     }
 
     init(from decoder: Decoder) throws {
@@ -35,9 +38,13 @@ struct DeviceRef: Codable, Hashable, Identifiable {
         productID = try c.decode(Int.self, forKey: .productID)
         name = try c.decode(String.self, forKey: .name)
         isBuiltIn = try c.decodeIfPresent(Bool.self, forKey: .isBuiltIn) ?? false
+        isMouse = try c.decodeIfPresent(Bool.self, forKey: .isMouse) ?? false
     }
 
     var id: String { isBuiltIn ? "built-in" : "\(vendorID):\(productID)" }
+
+    /// Built-in keyboard, then other keyboards, then mice.
+    var sortGroup: Int { isBuiltIn ? 0 : isMouse ? 2 : 1 }
 
     func matches(_ other: DeviceRef) -> Bool {
         isBuiltIn || other.isBuiltIn

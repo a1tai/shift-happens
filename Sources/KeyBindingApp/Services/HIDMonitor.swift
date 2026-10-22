@@ -101,13 +101,14 @@ final class HIDMonitor {
         onKey?(HIDKeyEvent(usage: HIDUsage(page: page, usage: usage), isDown: pressed, device: device, time: Date()))
     }
 
-    /// Media buttons (headsets) and mice with programmable buttons also match the manager;
-    /// only real keyboards are listed, one entry per keyboard, the built-in one first.
+    /// Devices that send key presses: keyboards, and mice whose extra buttons send keys.
+    /// The headphone jack's media buttons also match the manager but are not listed (see isKeyboard).
+    /// One entry per device, the built-in keyboard first.
     static func keyboards(in set: Set<IOHIDDevice>) -> [DeviceRef] {
         var seen = Set<String>()
         return set.filter(isKeyboard).map(deviceRef)
             .filter { seen.insert($0.id).inserted }
-            .sorted { ($0.isBuiltIn ? 0 : 1, $0.name) < ($1.isBuiltIn ? 0 : 1, $1.name) }
+            .sorted { ($0.sortGroup, $0.name) < ($1.sortGroup, $1.name) }
     }
 
     private static func deviceRef(_ device: IOHIDDevice) -> DeviceRef {
@@ -118,7 +119,8 @@ final class HIDMonitor {
         }
         var name = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? ""
         if name.isEmpty { name = String(format: "Keyboard %04X:%04X", vendor, product) }
-        return DeviceRef(vendorID: vendor, productID: product, name: name)
+        let isMouse = usagePairs(device).contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Mouse])
+        return DeviceRef(vendorID: vendor, productID: product, name: name, isMouse: isMouse)
     }
 
     /// The (page, usage) pairs a device declares, e.g. 1/6 keyboard, 1/2 mouse, 12/1 media buttons.
@@ -132,11 +134,10 @@ final class HIDMonitor {
         return builtIn && usagePairs(device).contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard])
     }
 
-    /// A keyboard, not a headset with volume buttons or a mouse that can also send keys.
+    /// Declares a keyboard interface (1/6), so hidutil can remap its keys. Mice with programmable
+    /// buttons do; the headphone jack's media buttons (12/1 only) don't.
     private static func isKeyboard(_ device: IOHIDDevice) -> Bool {
-        let pairs = usagePairs(device)
-        guard pairs.contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard]) else { return false }
-        return isBuiltInKeyboard(device) || !pairs.contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Mouse])
+        usagePairs(device).contains([kHIDPage_GenericDesktop, kHIDUsage_GD_Keyboard])
     }
 
     // MARK: - Permission

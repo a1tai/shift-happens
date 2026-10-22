@@ -37,9 +37,7 @@ struct RemapEditor: View {
                 }
                 Picker("Keyboard", selection: deviceSelection) {
                     Text("All keyboards (including built-in)").tag(String?.none)
-                    ForEach(deviceOptions) { device in
-                        Text(state.displayName(of: device)).tag(String?.some(device.id))
-                    }
+                    DevicePickerItems(devices: deviceOptions)
                 }
                 Toggle("Enabled", isOn: $draft.enabled)
             }
@@ -241,6 +239,29 @@ private struct ModifierToggle: Identifiable {
 }
 
 // MARK: - Shared pieces
+
+/// Picker rows for a device choice: keyboards first, then mice. Tags are device IDs.
+struct DevicePickerItems: View {
+    @EnvironmentObject private var state: AppState
+    let devices: [DeviceRef]
+
+    var body: some View {
+        let keyboards = devices.filter { !$0.isMouse }
+        let mice = devices.filter(\.isMouse)
+        if !keyboards.isEmpty {
+            Section("Keyboards") {
+                ForEach(keyboards) { Text(state.displayName(of: $0)).tag(String?.some($0.id)) }
+            }
+        }
+        if !mice.isEmpty {
+            Section("Mice & other devices") {
+                ForEach(mice) { device in
+                    Label(state.displayName(of: device), systemImage: "computermouse").tag(String?.some(device.id))
+                }
+            }
+        }
+    }
+}
 
 /// A menu of keys grouped by category.
 struct KeyPicker: View {

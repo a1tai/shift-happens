@@ -57,9 +57,7 @@ struct KeyboardScreen: View {
             Picker("Keyboard", selection: $deviceID) {
                 Text("All keyboards").tag(String?.none)
                 if !state.keyboardChoices.isEmpty { Divider() }
-                ForEach(state.keyboardChoices) { device in
-                    Text(state.displayName(of: device)).tag(String?.some(device.id))
-                }
+                DevicePickerItems(devices: state.keyboardChoices)
             }
             .frame(maxWidth: 280)
         }
