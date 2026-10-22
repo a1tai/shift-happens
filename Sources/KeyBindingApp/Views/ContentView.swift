@@ -34,32 +34,23 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
+            // One flat list of screens; Settings sits apart at the bottom, next to the main switch.
             List(selection: $selection) {
-                Section {
-                    ForEach([SidebarItem.keyboard, .monitor]) { item in
-                        Label(item.title, systemImage: item.icon).tag(item)
-                    }
+                ForEach([SidebarItem.keyboard, .monitor]) { item in
+                    Label(item.title, systemImage: item.icon).tag(item)
                 }
-                Section("Bindings") {
-                    Label(SidebarItem.remaps.title, systemImage: SidebarItem.remaps.icon)
-                        .badge(state.config.remaps.count)
-                        .tag(SidebarItem.remaps)
-                    Label(SidebarItem.combos.title, systemImage: SidebarItem.combos.icon)
-                        .badge(state.config.combos.count)
-                        .tag(SidebarItem.combos)
-                }
-                Section("Tools") {
-                    Label(SidebarItem.layoutFixer.title, systemImage: SidebarItem.layoutFixer.icon)
-                        .badge(state.config.layoutFixer.enabled ? Text(state.config.enabled ? "On" : "Paused") : nil)
-                        .tag(SidebarItem.layoutFixer)
-                }
-                Section {
-                    Label(SidebarItem.settings.title, systemImage: SidebarItem.settings.icon)
-                        .tag(SidebarItem.settings)
-                }
+                Label(SidebarItem.remaps.title, systemImage: SidebarItem.remaps.icon)
+                    .badge(state.config.remaps.count)
+                    .tag(SidebarItem.remaps)
+                Label(SidebarItem.combos.title, systemImage: SidebarItem.combos.icon)
+                    .badge(state.config.combos.count)
+                    .tag(SidebarItem.combos)
+                Label(SidebarItem.layoutFixer.title, systemImage: SidebarItem.layoutFixer.icon)
+                    .badge(state.config.layoutFixer.enabled ? Text(state.config.enabled ? "On" : "Paused") : nil)
+                    .tag(SidebarItem.layoutFixer)
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210)
-            .safeAreaInset(edge: .bottom) { StatusFooter().padding(12) }
+            .safeAreaInset(edge: .bottom) { StatusFooter(selection: $selection).padding(10) }
         } detail: {
             VStack(spacing: 0) {
                 if !DebugSnapshot.hidesBanners { PermissionBanner() }
@@ -82,18 +73,33 @@ struct ContentView: View {
     }
 }
 
-/// The main switch (pauses remaps, combos and the layout fixer together) plus a status line.
+/// Settings, the main switch (pauses remaps, combos and the layout fixer together) and a status line.
 private struct StatusFooter: View {
     @EnvironmentObject private var state: AppState
+    @Binding var selection: SidebarItem?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            let isSelected = selection == .settings
+            Button { selection = .settings } label: {
+                Label(SidebarItem.settings.title, systemImage: SidebarItem.settings.icon)
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isSelected ? Color.accentColor : Color.clear))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Divider()
             Toggle(isOn: $state.config.enabled) {
                 Text(state.config.enabled ? "Active" : "Paused")
                     .font(.callout.weight(.medium))
             }
             .toggleStyle(.switch)
             .controlSize(.small)
+            .padding(.horizontal, 8)
             .help("Pauses or resumes everything: remaps, combos and the Layout Fixer")
             if let error = state.lastError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
