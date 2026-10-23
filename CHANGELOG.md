@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-10-23
 
 - Combos can do an Action: Paste as Plain Text (works in any app, puts the clipboard back afterwards) or
   Run Shortcut (a shortcut from the Shortcuts app; if it fails, the reason shows in the sidebar).
