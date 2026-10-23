@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Combos can do an Action: Paste as Plain Text (works in any app, puts the clipboard back afterwards) or
+  Run Shortcut (a shortcut from the Shortcuts app; if it fails, the reason shows in the sidebar).
+
 ## 1.0.2 — 2026-10-22
 
 - Releases are signed with the same certificate every time, so macOS keeps the Input Monitoring and

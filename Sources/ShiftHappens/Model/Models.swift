@@ -189,10 +189,13 @@ struct ComboBinding: Codable, Hashable, Identifiable {
     var repeatsWhileHeld = false
     /// Opened (or brought to the front) instead of sending anything, when set.
     var app: AppTarget?
+    /// A built-in action (paste as plain text, run a shortcut) instead of sending anything, when set.
+    var action: BuiltInAction?
 
-    /// What the combo does: an app comes first, then a macro, then the output shortcut.
+    /// What the combo does: an app comes first, then a built-in action, then a macro, then the output shortcut.
     var isApp: Bool { app != nil }
-    var isMacro: Bool { app == nil && !macro.isEmpty }
+    var isAction: Bool { app == nil && action != nil }
+    var isMacro: Bool { app == nil && action == nil && !macro.isEmpty }
 
     /// Saved before fn was left out: a trigger, output or macro step that is the fn key. Such a combo can't work.
     var usesFn: Bool {
@@ -207,6 +210,7 @@ struct ComboBinding: Codable, Hashable, Identifiable {
     }
     var outputSummary: String {
         if let app { return app.name }
+        if let action { return action.display }
         return isMacro ? macro.summary : output.display
     }
 
@@ -233,6 +237,8 @@ struct ComboBinding: Codable, Hashable, Identifiable {
         stepDelay = try c.decodeIfPresent(Int.self, forKey: .stepDelay) ?? 0
         repeatsWhileHeld = try c.decodeIfPresent(Bool.self, forKey: .repeatsWhileHeld) ?? false
         app = try c.decodeIfPresent(AppTarget.self, forKey: .app)
+        // An action this version doesn't know (from a newer one) leaves the combo without it.
+        action = try? c.decodeIfPresent(BuiltInAction.self, forKey: .action)
     }
 }
 
@@ -294,6 +300,10 @@ struct AppConfig: Codable, Equatable {
             if let app = combo.app {
                 guard let safe = app.sanitized() else { return nil }
                 combo.app = safe
+            }
+            if let action = combo.action {
+                guard let safe = action.sanitized() else { return nil }
+                combo.action = safe
             }
             combo.note = String(combo.note.prefix(Limits.noteLength))
             combo.stepDelay = min(max(combo.stepDelay, 0), Limits.stepDelay)

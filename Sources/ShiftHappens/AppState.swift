@@ -93,6 +93,7 @@ final class AppState: NSObject, ObservableObject {
         LaunchAgent.refreshIfNeeded()
 
         hid.onKey = { [weak self] event in self?.handle(hidEvent: event) }
+        combos.onAction = { [weak self] action in self?.perform(action) }
         hid.isListening = { [weak self] in
             guard let self else { return false }
             return self.isMonitorViewed || self.isKeyboardViewed || self.captureHandler != nil
@@ -325,6 +326,23 @@ final class AppState: NSObject, ObservableObject {
 
     func displayName(of device: DeviceRef) -> String {
         devices.contains { $0.matches(device) } ? device.name : device.name + " (not connected)"
+    }
+
+    /// Runs a combo's built-in action. Failures show in the sidebar's status line.
+    func perform(_ action: BuiltInAction) {
+        switch action {
+        case .pastePlainText:
+            let poster = CGEventPoster()
+            let pasted = PlainTextPaste.run(paste: {
+                poster.key(0x09, down: true, modifiers: .command)   // ⌘V
+                poster.key(0x09, down: false, modifiers: .command)
+            })
+            if !pasted { NSSound.beep() }
+        case .runShortcut(let name):
+            ShortcutsRunner.run(name) { [weak self] failure in
+                if let failure { self?.lastError = failure }
+            }
+        }
     }
 
     /// The keyboard a new remap or preset is for by default: an external one if connected.

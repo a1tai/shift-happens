@@ -16,6 +16,14 @@ enum DebugSnapshot {
     static var opensMacroEditor: Bool { env["KB_EDIT"] == "macro" }
     /// KB_EDIT=app on the Combos screen opens the combo editor with an Open App output.
     static var opensAppEditor: Bool { env["KB_EDIT"] == "app" }
+    /// KB_EDIT=paste / KB_EDIT=shortcut on the Combos screen opens the combo editor with that built-in action.
+    static var editorAction: BuiltInAction? {
+        switch env["KB_EDIT"] {
+        case "paste": return .pastePlainText
+        case "shortcut": return .runShortcut("Make GIF")
+        default: return nil
+        }
+    }
     /// KB_ONBOARDING=1 shows the welcome sheet as on a first launch.
     static var showsOnboarding: Bool { env["KB_ONBOARDING"] == "1" }
     /// While rendering snapshots the app must not ask for permissions or open System Settings.
@@ -83,6 +91,20 @@ enum DebugSnapshot {
         print("APPTEST launched: \(running != nil), frontmost: \(front ?? "nil"), was running before: \(wasRunning)")
         if !wasRunning { running?.terminate() }
         exit(running != nil ? 0 : 1)
+    }
+
+    /// KB_SHORTCUTTEST=1: lists the user's shortcuts and runs one that doesn't exist, to check the error path.
+    /// Runs nothing else.
+    static func runShortcutTestIfRequested() {
+        guard env["KB_SHORTCUTTEST"] == "1" else { return }
+        let names = ShortcutsRunner.list()
+        print("SHORTCUTTEST listed \(names.count) shortcuts")
+        var result: String??
+        ShortcutsRunner.run("__shift_happens_selftest_missing__", timeout: 20) { result = .some($0) }
+        while result == nil { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+        let failure = result ?? nil
+        print("SHORTCUTTEST missing shortcut -> \(failure ?? "no error")")
+        exit(failure != nil ? 0 : 1)
     }
 
     /// KB_SELFTEST=1: checks the layout fixer's logic and config decoding, prints the results and exits.
@@ -335,6 +357,85 @@ enum DebugSnapshot {
         check("target from an .app", AppLauncher.target(for: URL(fileURLWithPath: "/System/Applications/Calculator.app"))?.bundleID == "com.apple.calculator")
         check("no target from a non-app", AppLauncher.target(for: URL(fileURLWithPath: "/bin/sh")) == nil)
 
+        // Built-in actions: model, limits, and Paste as Plain Text on a private pasteboard (never the user's).
+        var actionCombo = ComboBinding(trigger: KeyChord(keyCode: 0x72, modifiers: []), output: KeyChord(keyCode: 0x72, modifiers: []))
+        actionCombo.action = .pastePlainText
+        check("action combo", actionCombo.isAction && !actionCombo.isMacro && actionCombo.outputSummary == "Paste as Plain Text")
+        actionCombo.action = .runShortcut("Morning")
+        check("run shortcut display", actionCombo.outputSummary == "Run “Morning”")
+        let actionRoundTrip = (try? JSONEncoder().encode(actionCombo)).flatMap { try? JSONDecoder().decode(ComboBinding.self, from: $0) }
+        check("action combo round-trip", actionRoundTrip == actionCombo)
+        let unknownAction = #"{"trigger":{"keyCode":114,"modifiers":0},"output":{"keyCode":114,"modifiers":0},"action":{"teleport":{}}}"#
+        let decodedUnknown = try? JSONDecoder().decode(ComboBinding.self, from: Data(unknownAction.utf8))
+        check("unknown action is dropped, combo kept", decodedUnknown != nil && decodedUnknown?.action == nil)
+        check("old combo has no action", decodedPreApp?.action == nil)
+        check("empty shortcut name rejected", BuiltInAction.runShortcut("  ").sanitized() == nil)
+        check("shortcut name with a newline rejected", BuiltInAction.runShortcut("a\nb").sanitized() == nil)
+        check("overlong shortcut name rejected", BuiltInAction.runShortcut(String(repeating: "x", count: 300)).sanitized() == nil)
+        check("normal shortcut name kept", BuiltInAction.runShortcut("-Make GIF").sanitized() != nil)
+        var hostileAction = AppConfig()
+        var badAction = actionCombo
+        badAction.id = UUID()
+        badAction.action = .runShortcut("")
+        hostileAction.combos = [actionCombo, badAction]
+        check("combo with a bad action dropped", hostileAction.sanitized().combos.map(\.id) == [actionCombo.id])
+
+        let board = NSPasteboard(name: NSPasteboard.Name("ShiftHappens.selftest.\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        let bold = NSAttributedString(string: "Hello", attributes: [.font: NSFont.boldSystemFont(ofSize: 14)])
+        let rtf = bold.rtf(from: NSRange(location: 0, length: bold.length), documentAttributes: [:])!
+        let custom = NSPasteboard.PasteboardType("com.example.selftest")
+        func fillRich() {
+            board.clearContents()
+            let first = NSPasteboardItem()
+            first.setString("Hello", forType: .string)
+            first.setData(rtf, forType: .rtf)
+            first.setData(Data([1, 2, 3]), forType: custom)
+            let second = NSPasteboardItem()
+            second.setString("Second", forType: .string)
+            board.writeObjects([first, second])
+        }
+        fillRich()
+        let before = PasteboardSnapshot(board)
+        check("snapshot keeps every item and type", before.items.count == 2 && before.items[0].map(\.type).contains(custom)
+              && before.items[0].map(\.type).contains(.rtf))
+        var pasted: [String?] = []
+        var restore: (() -> Void)?
+        let ran = PlainTextPaste.run(on: board, paste: { pasted.append(board.string(forType: .string)) },
+                                     after: { _, work in restore = work })
+        // Several items' texts come out joined, one per line, as macOS reads them.
+        let pastedItems = board.pasteboardItems ?? []
+        check("paste sees only plain text", ran && pasted == ["Hello\nSecond"] && pastedItems.count == 1
+              && pastedItems[0].types == [.string], "\(pasted) \(pastedItems.map(\.types))")
+        restore?()
+        let after = PasteboardSnapshot(board)
+        let same = after.items.count == before.items.count && zip(after.items, before.items).allSatisfy { a, b in
+            a.count == b.count && zip(a, b).allSatisfy { $0.type == $1.type && $0.data == $1.data }
+        }
+        check("clipboard restored exactly", same)
+
+        fillRich()
+        restore = nil
+        _ = PlainTextPaste.run(on: board, paste: {}, after: { _, work in restore = work })
+        board.clearContents()
+        board.setString("copied meanwhile", forType: .string)
+        restore?()
+        check("restore skipped when something else was copied", board.string(forType: .string) == "copied meanwhile")
+
+        board.clearContents()
+        board.setData(rtf, forType: .rtf)
+        check("text from RTF only", PlainTextPaste.plainText(in: board) == "Hello")
+        board.clearContents()
+        board.setData(Data("<p>Hi <b>there</b></p>".utf8), forType: .html)
+        check("text from HTML only", PlainTextPaste.plainText(in: board)?.trimmingCharacters(in: .whitespacesAndNewlines) == "Hi there",
+              PlainTextPaste.plainText(in: board) ?? "nil")
+        board.clearContents()
+        board.setData(Data([0x89, 0x50, 0x4E, 0x47]), forType: .png)
+        var pastedImage = false
+        let ranOnImage = PlainTextPaste.run(on: board, paste: { pastedImage = true }, after: { _, _ in })
+        check("no text: nothing pasted, clipboard untouched", !ranOnImage && !pastedImage
+              && board.data(forType: .png) == Data([0x89, 0x50, 0x4E, 0x47]) && board.string(forType: .string) == nil)
+
         // Duplicate reports are dropped, but a key released while nobody listened can be pressed again.
         var filter = KeyStateFilter()
         check("first press accepted", filter.accept("kb/7/21", pressed: true))
@@ -488,6 +589,7 @@ enum DebugSnapshot {
     static var opensComboEditor: Bool { false }
     static var opensMacroEditor: Bool { false }
     static var opensAppEditor: Bool { false }
+    static var editorAction: BuiltInAction? { nil }
     static var showsOnboarding: Bool { false }
     static var isActive: Bool { false }
     static var isSelfTest: Bool { false }
@@ -498,6 +600,7 @@ enum DebugSnapshot {
     static func runIfRequested(window: NSWindow) {}
     static func runSelfTestIfRequested() {}
     static func runAppTestIfRequested() {}
+    static func runShortcutTestIfRequested() {}
     #endif
 }
 

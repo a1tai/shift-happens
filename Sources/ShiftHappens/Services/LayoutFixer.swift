@@ -328,7 +328,7 @@ final class LayoutFixer {
 
     /// Converts the selected text and pastes it over the selection (setting it through Accessibility
     /// reports success in many apps without changing anything). The clipboard is put back afterwards.
-    private func convertSelection(_ text: String, savedClipboard: [[(NSPasteboard.PasteboardType, Data)]]? = nil) {
+    private func convertSelection(_ text: String, savedClipboard: PasteboardSnapshot? = nil) {
         let ids = sources.enabled().map(\.id)
         guard let current = sources.currentID(), ids.count >= 2 else { return }
         let from: String
@@ -375,23 +375,14 @@ final class LayoutFixer {
         }
     }
 
-    private func savePasteboard() -> [[(NSPasteboard.PasteboardType, Data)]] {
-        (pasteboard.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
-        }
-    }
+    private func savePasteboard() -> PasteboardSnapshot { PasteboardSnapshot(pasteboard) }
 
     /// Puts the user's clipboard back once the paste has happened, unless something else changed it meanwhile.
-    private func restorePasteboard(_ saved: [[(NSPasteboard.PasteboardType, Data)]], afterCharCount count: Int) {
+    private func restorePasteboard(_ saved: PasteboardSnapshot, afterCharCount count: Int) {
         let changeCount = pasteboard.changeCount
         DispatchQueue.main.asyncAfter(deadline: .now() + Timing.clipboardRestoreDelay(charCount: count)) { [self] in
             guard pasteboard.changeCount == changeCount, !saved.isEmpty else { return }
-            pasteboard.clearContents()
-            pasteboard.writeObjects(saved.map { itemData in
-                let item = NSPasteboardItem()
-                for (type, data) in itemData { item.setData(data, forType: type) }
-                return item
-            })
+            saved.restore(to: pasteboard)
         }
     }
 

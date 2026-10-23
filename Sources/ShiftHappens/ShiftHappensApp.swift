@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DebugSnapshot.runSelfTestIfRequested()
         DebugSnapshot.runAppTestIfRequested()
+        DebugSnapshot.runShortcutTestIfRequested()
         Self.shared = self
         #if DEBUG
         DistributedNotificationCenter.default().addObserver(

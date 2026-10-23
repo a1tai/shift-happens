@@ -96,12 +96,13 @@ struct ComboEditor: View {
     @State private var kind: OutputKind
     private let isNew: Bool
 
-    private enum OutputKind { case shortcut, macro, app }
+    private enum OutputKind { case shortcut, macro, app, action }
     private var sendsMacro: Bool { kind == .macro }
 
     init(combo: ComboBinding) {
         _draft = State(initialValue: combo)
-        let kind: OutputKind = combo.isApp ? .app : combo.isMacro || DebugSnapshot.opensMacroEditor ? .macro : .shortcut
+        let kind: OutputKind = combo.isApp ? .app : combo.isAction ? .action
+            : combo.isMacro || DebugSnapshot.opensMacroEditor ? .macro : .shortcut
         _kind = State(initialValue: kind)
         isNew = !AppState.shared.config.combos.contains { $0.id == combo.id }
     }
@@ -119,6 +120,7 @@ struct ComboEditor: View {
         case .shortcut: return draft.trigger != draft.output
         case .macro: return !draft.macro.isEmpty
         case .app: return draft.app != nil
+        case .action: return draft.action?.sanitized() != nil
         }
     }
 
@@ -137,11 +139,12 @@ struct ComboEditor: View {
                 Divider().gridCellUnsizedAxes(.horizontal).padding(.vertical, 4)
 
                 GridRow {
-                    Text("Action")
-                    Picker("Action", selection: $kind) {
+                    Text("Then")
+                    Picker("Then", selection: $kind) {
                         Text("Shortcut").tag(OutputKind.shortcut)
                         Text("Macro").tag(OutputKind.macro)
                         Text("Open App").tag(OutputKind.app)
+                        Text("Action").tag(OutputKind.action)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -167,6 +170,26 @@ struct ComboEditor: View {
                             .disabled(draft.app == nil)
                     }
                     caption("Opens the app, or brings it to the front if it is running.")
+                case .action:
+                    GridRow {
+                        Text("Action")
+                        Picker("Action", selection: actionKind) {
+                            Label("Paste as Plain Text", systemImage: "doc.plaintext").tag(ActionKind.pastePlainText)
+                            Label("Run Shortcut", systemImage: "square.stack.3d.up").tag(ActionKind.runShortcut)
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                    }
+                    if case .runShortcut = draft.action {
+                        GridRow {
+                            Text("Shortcut")
+                            ShortcutNamePicker(name: shortcutName)
+                        }
+                        caption("Runs this shortcut from the Shortcuts app. If it fails, the reason shows in the sidebar.")
+                    } else {
+                        caption("Pastes the clipboard's text without fonts, colors or links, in any app. "
+                                + "The clipboard is put back right after.")
+                    }
                 }
 
                 Divider().gridCellUnsizedAxes(.horizontal).padding(.vertical, 4)
@@ -208,6 +231,7 @@ struct ComboEditor: View {
                     var combo = draft
                     if kind != .macro { combo.macro = [] }
                     if kind != .app { combo.app = nil }
+                    if kind != .action { combo.action = nil }
                     state.save(combo)
                     dismiss()
                     if !state.accessibilityGranted { Permissions.request(.accessibility) }
@@ -218,6 +242,9 @@ struct ComboEditor: View {
         }
         .padding(24)
         .frame(width: sendsMacro ? 780 : 560, height: sendsMacro ? Self.macroSheetHeight : nil)
+        .onChange(of: kind) { kind in
+            if kind == .action, draft.action == nil { draft.action = .pastePlainText }
+        }
 
     }
 
@@ -231,6 +258,26 @@ struct ComboEditor: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, -4)
         }
+    }
+
+    private enum ActionKind { case pastePlainText, runShortcut }
+
+    /// Picking an action starts it fresh; switching to Open App, Macro or Shortcut leaves it until Save.
+    private var actionKind: Binding<ActionKind> {
+        Binding(
+            get: { if case .runShortcut = draft.action { return .runShortcut } else { return .pastePlainText } },
+            set: { kind in
+                switch kind {
+                case .pastePlainText: draft.action = .pastePlainText
+                case .runShortcut: if case .runShortcut = draft.action {} else { draft.action = .runShortcut("") }
+                }
+            }
+        )
+    }
+
+    private var shortcutName: Binding<String> {
+        Binding(get: { if case .runShortcut(let name) = draft.action { return name } else { return "" } },
+                set: { draft.action = .runShortcut($0) })
     }
 
     private var hidesBinding: Binding<Bool> {
@@ -501,5 +548,53 @@ extension View {
     @ViewBuilder
     func cancelAction(_ enabled: Bool) -> some View {
         if enabled { keyboardShortcut(.cancelAction) } else { self }
+    }
+}
+
+/// The user's shortcuts from the Shortcuts app, loaded when shown. A saved name that is no longer in the
+/// list stays selectable, so opening the editor never changes the combo by itself.
+struct ShortcutNamePicker: View {
+    @Binding var name: String
+    @State private var names: [String]?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let names {
+                if names.isEmpty && name.isEmpty {
+                    Text("No shortcuts found in the Shortcuts app").foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                } else {
+                    Picker("Shortcut", selection: $name) {
+                        if name.isEmpty { Text("Choose…").tag("") }
+                        ForEach(names, id: \.self) { Text($0).tag($0) }
+                        if !name.isEmpty && !names.contains(name) {
+                            Text("\(name) (not found)").tag(name)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+                }
+            } else {
+                ProgressView().controlSize(.small)
+                Text("Loading shortcuts…").foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            Button {
+                load()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("Reload the list from the Shortcuts app")
+            .disabled(names == nil)
+        }
+        .onAppear(perform: load)
+    }
+
+    private func load() {
+        names = nil
+        DispatchQueue.global(qos: .userInitiated).async {
+            let list = ShortcutsRunner.list()
+            DispatchQueue.main.async { names = list }
+        }
     }
 }

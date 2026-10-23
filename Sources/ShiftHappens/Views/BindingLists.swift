@@ -130,6 +130,9 @@ struct CombosScreen: View {
                             if let app = combo.app {
                                 AppLabel(app: app, iconSize: 16)
                                     .opacity(combo.enabled ? 1 : 0.5)
+                            } else if let action = combo.action {
+                                Label(action.display, systemImage: action.systemImage)
+                                    .opacity(combo.enabled ? 1 : 0.5)
                             } else {
                                 KeyBadge(text: combo.outputSummary, highlighted: combo.enabled)
                             }
@@ -155,7 +158,8 @@ struct CombosScreen: View {
         .padding(24)
         .sheet(item: $editing) { ComboEditor(combo: $0) }
         .onAppear {
-            if DebugSnapshot.opensComboEditor || DebugSnapshot.opensMacroEditor || DebugSnapshot.opensAppEditor {
+            if DebugSnapshot.opensComboEditor || DebugSnapshot.opensMacroEditor || DebugSnapshot.opensAppEditor
+                || DebugSnapshot.editorAction != nil {
                 var combo = ComboBinding(trigger: KeyChord(keyCode: 0x69, modifiers: []),
                                          output: KeyChord(keyCode: 0x15, modifiers: [.command, .shift]))
                 if DebugSnapshot.opensMacroEditor {
@@ -168,6 +172,7 @@ struct CombosScreen: View {
                     combo.app = AppLauncher.target(for: URL(fileURLWithPath: "/System/Applications/Calculator.app"))
                     combo.macro = [MacroItem(step: .openApp(combo.app!)), MacroItem(step: .text("2+2"))]
                 }
+                combo.action = DebugSnapshot.editorAction
                 editing = combo
             }
         }

@@ -23,6 +23,8 @@ final class ComboEngine {
     private var swallowedMouseUps = Set<Int>()
     private let source = CGEventSource(stateID: .privateState)
     let macros = MacroPlayer()
+    /// Performs a built-in action (on the main thread, outside the event tap's callback).
+    var onAction: ((BuiltInAction) -> Void)?
 
     var isRunning: Bool { tap != nil }
 
@@ -103,6 +105,9 @@ final class ComboEngine {
         if let app = binding.app {
             // Once per press: holding the key must not toggle the app back and forth.
             if !isRepeat { open(app) }
+        } else if let action = binding.action {
+            // Once per press: holding the key must not paste or run the shortcut again and again.
+            if !isRepeat { perform(action) }
         } else if binding.isMacro {
             // A held key repeats; a macro runs again only if asked to, and never twice at once.
             if !isRepeat || binding.repeatsWhileHeld { macros.play(binding) }
@@ -125,7 +130,7 @@ final class ComboEngine {
             return Unmanaged.passUnretained(event)
         }
         swallowedMouseUps.insert(button)
-        if let app = binding.app { open(app) } else if binding.isMacro { macros.play(binding) } else { post(binding.output) }
+        if let app = binding.app { open(app) } else if let action = binding.action { perform(action) } else if binding.isMacro { macros.play(binding) } else { post(binding.output) }
         return nil
     }
 
@@ -143,6 +148,10 @@ final class ComboEngine {
     /// Outside the event tap's callback, so the tap never waits for the app to open.
     private func open(_ app: AppTarget) {
         DispatchQueue.main.async { AppLauncher.open(app) }
+    }
+
+    private func perform(_ action: BuiltInAction) {
+        DispatchQueue.main.async { [weak self] in self?.onAction?(action) }
     }
 
     private func post(_ chord: KeyChord) {
