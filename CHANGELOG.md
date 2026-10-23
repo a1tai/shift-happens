@@ -4,6 +4,8 @@
 
 - Combos can do an Action: Paste as Plain Text (works in any app, puts the clipboard back afterwards) or
   Run Shortcut (a shortcut from the Shortcuts app; if it fails, the reason shows in the sidebar).
+- More actions: Change Case of the selected text (UPPERCASE, lowercase, Title Case) and window actions
+  (Maximize, Left Half, Right Half, Restore) for the front window, on whichever screen it is.
 
 ## 1.0.2 — 2026-10-22
 

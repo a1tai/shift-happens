@@ -59,6 +59,7 @@ final class AppState: NSObject, ObservableObject {
     let hid = HIDMonitor()
     let combos = ComboEngine()
     let layoutFixer = LayoutFixer()
+    let windows = WindowMover()
 
     private var localMonitor: Any?
     /// Keeps App Nap away. A menu bar app with no window open gets napped, and its event taps are then
@@ -338,6 +339,14 @@ final class AppState: NSObject, ObservableObject {
                 poster.key(0x09, down: false, modifiers: .command)
             })
             if !pasted { NSSound.beep() }
+        case .changeCase(let textCase):
+            let poster = CGEventPoster()
+            CaseChange.run(textCase,
+                           copy: { poster.key(0x08, down: true, modifiers: .command); poster.key(0x08, down: false, modifiers: .command) },
+                           paste: { poster.key(0x09, down: true, modifiers: .command); poster.key(0x09, down: false, modifiers: .command) },
+                           failed: { NSSound.beep() })
+        case .window(let action):
+            if !windows.perform(action) { NSSound.beep() }
         case .runShortcut(let name):
             ShortcutsRunner.run(name) { [weak self] failure in
                 if let failure { self?.lastError = failure }

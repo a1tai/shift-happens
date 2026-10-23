@@ -173,9 +173,17 @@ struct ComboEditor: View {
                 case .action:
                     GridRow {
                         Text("Action")
-                        Picker("Action", selection: actionKind) {
-                            Label("Paste as Plain Text", systemImage: "doc.plaintext").tag(ActionKind.pastePlainText)
-                            Label("Run Shortcut", systemImage: "square.stack.3d.up").tag(ActionKind.runShortcut)
+                        Picker("Action", selection: actionChoice) {
+                            Section("Text") {
+                                choice(.pastePlainText)
+                                ForEach(TextCase.allCases, id: \.self) { choice(.changeCase($0)) }
+                            }
+                            Section("Window") {
+                                ForEach(WindowAction.allCases, id: \.self) { choice(.window($0)) }
+                            }
+                            Section("Shortcuts") {
+                                Label("Run Shortcut", systemImage: "square.stack.3d.up").tag(BuiltInAction.runShortcut(""))
+                            }
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
@@ -186,9 +194,8 @@ struct ComboEditor: View {
                             ShortcutNamePicker(name: shortcutName)
                         }
                         caption("Runs this shortcut from the Shortcuts app. If it fails, the reason shows in the sidebar.")
-                    } else {
-                        caption("Pastes the clipboard's text without fonts, colors or links, in any app. "
-                                + "The clipboard is put back right after.")
+                    } else if let action = draft.action {
+                        caption(Self.explanation(of: action))
                     }
                 }
 
@@ -260,19 +267,39 @@ struct ComboEditor: View {
         }
     }
 
-    private enum ActionKind { case pastePlainText, runShortcut }
-
-    /// Picking an action starts it fresh; switching to Open App, Macro or Shortcut leaves it until Save.
-    private var actionKind: Binding<ActionKind> {
+    /// The menu's tag for an action: Run Shortcut is one entry whatever shortcut it runs.
+    private var actionChoice: Binding<BuiltInAction> {
         Binding(
-            get: { if case .runShortcut = draft.action { return .runShortcut } else { return .pastePlainText } },
-            set: { kind in
-                switch kind {
-                case .pastePlainText: draft.action = .pastePlainText
-                case .runShortcut: if case .runShortcut = draft.action {} else { draft.action = .runShortcut("") }
-                }
+            get: {
+                if case .runShortcut = draft.action { return .runShortcut("") }
+                return draft.action ?? .pastePlainText
+            },
+            set: { choice in
+                // Picking Run Shortcut again keeps the shortcut already chosen.
+                if case .runShortcut = choice, case .runShortcut = draft.action { return }
+                draft.action = choice
             }
         )
+    }
+
+    private func choice(_ action: BuiltInAction) -> some View {
+        Label(action.menuTitle, systemImage: action.systemImage).tag(action)
+    }
+
+    private static func explanation(of action: BuiltInAction) -> String {
+        switch action {
+        case .pastePlainText:
+            return "Pastes the clipboard's text without fonts, colors or links, in any app. The clipboard is put back right after."
+        case .changeCase:
+            return "Changes the case of the selected text, in any app (the text loses its formatting). "
+                + "The clipboard is put back right after."
+        case .window(.restore):
+            return "Puts the front window back where it was before Maximize or Left/Right Half moved it."
+        case .window:
+            return "Moves and resizes the front window on its screen, leaving the menu bar and Dock free."
+        case .runShortcut:
+            return ""
+        }
     }
 
     private var shortcutName: Binding<String> {

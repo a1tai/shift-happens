@@ -4,6 +4,10 @@ import AppKit
 enum BuiltInAction: Codable, Hashable {
     /// Pastes the clipboard's text without its formatting, in any app. The clipboard is put back afterwards.
     case pastePlainText
+    /// Changes the case of the selected text. The clipboard is put back afterwards.
+    case changeCase(TextCase)
+    /// Moves and resizes the front window.
+    case window(WindowAction)
     /// Runs one of the user's shortcuts from the Shortcuts app, by name.
     case runShortcut(String)
 
@@ -12,13 +16,25 @@ enum BuiltInAction: Codable, Hashable {
     var display: String {
         switch self {
         case .pastePlainText: return "Paste as Plain Text"
+        case .changeCase(let textCase): return "Change Case: " + textCase.title
+        case .window(let action): return action.title
         case .runShortcut(let name): return "Run “\(name)”"
+        }
+    }
+
+    /// The name in the action menu, where the group heading (Text, Window) already says the rest.
+    var menuTitle: String {
+        switch self {
+        case .changeCase(let textCase): return textCase.title
+        default: return display
         }
     }
 
     var systemImage: String {
         switch self {
         case .pastePlainText: return "doc.plaintext"
+        case .changeCase: return "textformat"
+        case .window(let action): return action.systemImage
         case .runShortcut: return "square.stack.3d.up"
         }
     }
@@ -26,12 +42,46 @@ enum BuiltInAction: Codable, Hashable {
     /// A shortcut name of reasonable length, on one line. Anything else read from a file is dropped.
     func sanitized() -> BuiltInAction? {
         switch self {
-        case .pastePlainText:
+        case .pastePlainText, .changeCase, .window:
             return self
         case .runShortcut(let name):
             let valid = !name.trimmingCharacters(in: .whitespaces).isEmpty && name.count <= Self.maxShortcutName
                 && !name.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
             return valid ? self : nil
+        }
+    }
+}
+
+enum TextCase: String, Codable, CaseIterable {
+    case upper, lower, title
+
+    var title: String {
+        switch self {
+        case .upper: return "UPPERCASE"
+        case .lower: return "lowercase"
+        case .title: return "Title Case"
+        }
+    }
+}
+
+enum WindowAction: String, Codable, CaseIterable {
+    case maximize, leftHalf, rightHalf, restore
+
+    var title: String {
+        switch self {
+        case .maximize: return "Maximize Window"
+        case .leftHalf: return "Window to Left Half"
+        case .rightHalf: return "Window to Right Half"
+        case .restore: return "Restore Window"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .maximize: return "macwindow"
+        case .leftHalf: return "rectangle.lefthalf.filled"
+        case .rightHalf: return "rectangle.righthalf.filled"
+        case .restore: return "arrow.uturn.backward"
         }
     }
 }

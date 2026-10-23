@@ -21,6 +21,8 @@ enum DebugSnapshot {
         switch env["KB_EDIT"] {
         case "paste": return .pastePlainText
         case "shortcut": return .runShortcut("Make GIF")
+        case "window": return .window(.leftHalf)
+        case "case": return .changeCase(.title)
         default: return nil
         }
     }
@@ -435,6 +437,76 @@ enum DebugSnapshot {
         let ranOnImage = PlainTextPaste.run(on: board, paste: { pastedImage = true }, after: { _, _ in })
         check("no text: nothing pasted, clipboard untouched", !ranOnImage && !pastedImage
               && board.data(forType: .png) == Data([0x89, 0x50, 0x4E, 0x47]) && board.string(forType: .string) == nil)
+
+        // Change Case: transforms, and the copy → paste → restore flow on the private pasteboard.
+        let en = Locale(identifier: "en_US"), ru = Locale(identifier: "ru_RU")
+        check("uppercase Cyrillic", CaseChange.transform("привет, мир", to: .upper, locale: ru) == "ПРИВЕТ, МИР")
+        check("lowercase mixed", CaseChange.transform("HeLLo ЁЛКА", to: .lower, locale: en) == "hello ёлка")
+        check("title case", CaseChange.transform("the QUICK brown-fox don't", to: .title, locale: en) == "The Quick Brown-Fox Don't",
+              CaseChange.transform("the QUICK brown-fox don't", to: .title, locale: en))
+        check("title case Cyrillic", CaseChange.transform("ростов-на-дону, ёж", to: .title, locale: ru) == "Ростов-На-Дону, Ёж")
+        check("change case display", BuiltInAction.changeCase(.upper).display == "Change Case: UPPERCASE"
+              && BuiltInAction.window(.leftHalf).display == "Window to Left Half")
+        let newActions: [BuiltInAction] = [.changeCase(.title), .window(.restore)]
+        check("new actions round-trip", newActions.allSatisfy { action in
+            (try? JSONEncoder().encode(action)).flatMap { try? JSONDecoder().decode(BuiltInAction.self, from: $0) } == action
+        })
+        let badCase = #"{"trigger":{"keyCode":114,"modifiers":0},"output":{"keyCode":114,"modifiers":0},"action":{"changeCase":{"_0":"sideways"}}}"#
+        check("unknown case value is dropped", (try? JSONDecoder().decode(ComboBinding.self, from: Data(badCase.utf8)))?.action == nil)
+
+        fillRich()
+        var caseRestore: (() -> Void)?
+        var pastedText: String?
+        var caseFailed = false
+        CaseChange.run(.upper, on: board,
+                       copy: { board.clearContents(); board.setString("selected text", forType: .string) },
+                       paste: { pastedText = board.string(forType: .string) },
+                       failed: { caseFailed = true },
+                       wait: { done, then in then(done()) },
+                       after: { _, work in caseRestore = work })
+        caseRestore?()
+        let afterCase = PasteboardSnapshot(board)
+        check("change case pastes the new text and restores the clipboard", !caseFailed && pastedText == "SELECTED TEXT"
+              && afterCase.items.count == 2 && afterCase.items[0].contains { $0.type == custom })
+        fillRich()
+        caseFailed = false
+        pastedText = nil
+        CaseChange.run(.upper, on: board, copy: {}, paste: { pastedText = "x" }, failed: { caseFailed = true },
+                       wait: { done, then in then(done()) }, after: { _, _ in })
+        check("nothing selected: beep, nothing pasted, clipboard untouched", caseFailed && pastedText == nil
+              && board.data(forType: custom) == Data([1, 2, 3]))
+
+        // Window actions: frame math in Accessibility coordinates (y down from the main screen's top).
+        // Main screen 1440×900 with a 25 pt menu bar and a 70 pt Dock; a 1920×1080 screen on its right,
+        // its top 100 pt higher than the main screen's.
+        let mainVisible = WindowLayout.axFrame(ofAppKit: CGRect(x: 0, y: 70, width: 1440, height: 805), mainHeight: 900)
+        check("main screen in AX coordinates", mainVisible == CGRect(x: 0, y: 25, width: 1440, height: 805), "\(mainVisible)")
+        let rightVisible = WindowLayout.axFrame(ofAppKit: CGRect(x: 1440, y: -80, width: 1920, height: 1080), mainHeight: 900)
+        check("second screen in AX coordinates", rightVisible == CGRect(x: 1440, y: -100, width: 1920, height: 1080), "\(rightVisible)")
+        let screens = [mainVisible, rightVisible]
+        check("window on the main screen", WindowLayout.screen(for: CGRect(x: 100, y: 100, width: 500, height: 400), among: screens) == mainVisible)
+        check("window mostly on the second screen", WindowLayout.screen(for: CGRect(x: 1300, y: 0, width: 800, height: 600), among: screens) == rightVisible)
+        check("window off every screen goes to the nearest overlap",
+              WindowLayout.screen(for: CGRect(x: 1400, y: 950, width: 200, height: 200), among: screens) != nil)
+        check("maximize fills the visible area", WindowLayout.target(.maximize, in: mainVisible) == mainVisible)
+        let left = WindowLayout.target(.leftHalf, in: rightVisible)!, right = WindowLayout.target(.rightHalf, in: rightVisible)!
+        check("halves split the screen exactly", left == CGRect(x: 1440, y: -100, width: 960, height: 1080)
+              && right == CGRect(x: 2400, y: -100, width: 960, height: 1080))
+        let odd = CGRect(x: 0, y: 25, width: 1441, height: 805)
+        check("odd width: halves still cover it", WindowLayout.target(.leftHalf, in: odd)!.width + WindowLayout.target(.rightHalf, in: odd)!.width == 1441)
+        check("restore has no target frame", WindowLayout.target(.restore, in: mainVisible) == nil)
+        var memory = WindowMemory<Int>(same: ==)
+        let start = CGRect(x: 10, y: 40, width: 600, height: 400)
+        memory.willMove(1, from: start, to: left)
+        memory.willMove(1, from: left, to: mainVisible)
+        check("restore after several moves returns to the start", memory.takeOriginal(of: 1) == start)
+        check("restore twice does nothing", memory.takeOriginal(of: 1) == nil)
+        memory.willMove(2, from: start, to: left)
+        let movedByHand = CGRect(x: 300, y: 300, width: 500, height: 500)
+        memory.willMove(2, from: movedByHand, to: right)
+        check("a window moved by hand restores to where the user put it", memory.takeOriginal(of: 2) == movedByHand)
+        for window in 0..<30 { memory.willMove(window, from: start, to: left) }
+        check("memory keeps only the last windows", memory.takeOriginal(of: 0) == nil && memory.takeOriginal(of: 29) == start)
 
         // Duplicate reports are dropped, but a key released while nobody listened can be pressed again.
         var filter = KeyStateFilter()
