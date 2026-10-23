@@ -134,7 +134,7 @@ final class AppState: NSObject, ObservableObject {
         // Keys meant for this app (recording a shortcut, the key monitor) must not switch the layout.
         layoutFixer.isPaused = { [weak self] in
             guard let self else { return false }
-            return self.combos.isPaused || (NSApp.isActive && self.swallowLocalKeys > 0)
+            return self.combos.isPaused || (NSApp.isActive && self.swallowLocalKeys > 0) || self.isMonitorViewed
         }
         let center = DistributedNotificationCenter.default()
         let selectedChanged = kTISNotifySelectedKeyboardInputSourceChanged! as String
@@ -384,8 +384,15 @@ final class AppState: NSObject, ObservableObject {
 
     // MARK: - Who is looking at key presses
 
-    private var isMonitorViewed: Bool { monitorScreenOpen && windowVisible && NSApp.isActive }
+    /// An editor sheet over the Key Monitor pauses it: no presses are shown or swallowed until it closes.
+    private var monitorCovered = false
+    private var isMonitorViewed: Bool { monitorScreenOpen && !monitorCovered && windowVisible && NSApp.isActive }
     private var isKeyboardViewed: Bool { keyboardScreenOpen && windowVisible && NSApp.isActive }
+
+    func setMonitorCovered(_ covered: Bool) {
+        monitorCovered = covered
+        forgetKeysNoLongerViewed()
+    }
 
     func setMonitorScreenOpen(_ open: Bool) {
         monitorScreenOpen = open
@@ -490,10 +497,20 @@ final class AppState: NSObject, ObservableObject {
             return event.type == .keyDown ? nil : event
         }
         if isMonitorViewed { updateLastKey(event) }
-        if swallowLocalKeys > 0, event.type == .keyDown, !event.modifierFlags.contains(.command) {
-            return nil
-        }
-        return event
+        let swallows = Self.swallowsKey(isKeyDown: event.type == .keyDown,
+                                        hasCommand: event.modifierFlags.contains(.command),
+                                        swallowCount: swallowLocalKeys, monitorViewed: isMonitorViewed,
+                                        inMainWindow: event.window != nil && event.window === NSApp.mainWindow)
+        return swallows ? nil : event
+    }
+
+    /// Whether the app's own window drops a key press (so it doesn't beep or act) instead of handling it.
+    /// The Key Monitor drops plain key presses, but only those typed into the main window itself: a sheet or
+    /// popover open over it (a remap or combo editor) always gets its typing. ⌘ shortcuts always get through.
+    static func swallowsKey(isKeyDown: Bool, hasCommand: Bool, swallowCount: Int, monitorViewed: Bool,
+                            inMainWindow: Bool) -> Bool {
+        guard isKeyDown, !hasCommand else { return false }
+        return swallowCount > 0 || (monitorViewed && inMainWindow)
     }
 
     /// Adds what macOS made of a key press to the monitor's current press.

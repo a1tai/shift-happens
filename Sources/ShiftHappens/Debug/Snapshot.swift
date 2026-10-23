@@ -508,6 +508,17 @@ enum DebugSnapshot {
         for window in 0..<30 { memory.willMove(window, from: start, to: left) }
         check("memory keeps only the last windows", memory.takeOriginal(of: 0) == nil && memory.takeOriginal(of: 29) == start)
 
+        // Key Monitor: keys typed into an editor opened over it must reach the editor.
+        func swallows(_ monitorViewed: Bool, inMain: Bool, count: Int = 0, command: Bool = false, down: Bool = true) -> Bool {
+            AppState.swallowsKey(isKeyDown: down, hasCommand: command, swallowCount: count, monitorViewed: monitorViewed, inMainWindow: inMain)
+        }
+        check("monitor swallows plain keys in its window", swallows(true, inMain: true))
+        check("monitor never swallows typing in a sheet over it", !swallows(true, inMain: false))
+        check("a paused monitor swallows nothing", !swallows(false, inMain: true))
+        check("⌘ shortcuts always get through", !swallows(true, inMain: true, command: true))
+        check("key ups are never swallowed", !swallows(true, inMain: true, down: false))
+        check("a recorder swallows keys anywhere", swallows(false, inMain: false, count: 1))
+
         // The catalog of macOS shortcuts.
         let catalog = SystemShortcut.all
         check("catalog chords are valid keys", catalog.allSatisfy { $0.chord.isValid && $0.chord.mouseButton == nil })

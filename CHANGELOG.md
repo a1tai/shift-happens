@@ -10,6 +10,8 @@
   Finder, text, accessibility); the Combos list shows their names.
 - Arrow keys, F-keys and Home/End/Page Up/Page Down sent by combos and macros carry the same flags as a
   real keyboard, so macOS shortcuts such as ⌃↑ (Mission Control) or ⌘F5 (VoiceOver) react to them.
+- Fixed: a remap or combo editor opened from the Key Monitor couldn't be typed into; the monitor now pauses
+  while an editor is open over it. The remap editor has the same layout as the combo editor.
 
 ## 1.0.2 — 2026-10-22
 

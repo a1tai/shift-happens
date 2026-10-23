@@ -18,23 +18,34 @@ struct RemapEditor: View {
         VStack(alignment: .leading, spacing: 18) {
             Text(isNew ? "New Remap" : "Remap").font(.title2.bold())
 
-            Form {
-                LabeledContent("Key") {
-                    KeyField(usage: $draft.from, keys: KeyCatalog.sources) { event in
+            // The same layout as the combo editor: one label column, every control the same width.
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
+                GridRow {
+                    Text("Key").gridColumnAlignment(.trailing)
+                    KeyField(usage: $draft.from, keys: KeyCatalog.sources, fillsWidth: true) { event in
                         // The key belongs to the keyboard it was pressed on; switch to "all" below if needed.
                         draft.device = event.device
                     }
                 }
-                LabeledContent("Acts as") {
-                    KeyField(usage: $draft.to, keys: KeyCatalog.targets)
+                GridRow {
+                    Text("Acts as")
+                    KeyField(usage: $draft.to, keys: KeyCatalog.targets, fillsWidth: true)
                 }
-                Picker("Keyboard", selection: deviceSelection) {
-                    Text("All keyboards (including built-in)").tag(String?.none)
-                    DevicePickerItems(devices: deviceOptions)
+                GridRow {
+                    Text("Keyboard")
+                    Picker("Keyboard", selection: deviceSelection) {
+                        Text("All keyboards (including built-in)").tag(String?.none)
+                        DevicePickerItems(devices: deviceOptions)
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
                 }
-                Toggle("Enabled", isOn: $draft.enabled)
+                GridRow {
+                    Color.clear.frame(width: 1, height: 1)
+                    Toggle("Enabled", isOn: $draft.enabled)
+                }
+                Divider().gridCellUnsizedAxes(.horizontal).padding(.vertical, 4)
             }
-            .formStyle(.grouped)
 
             preview
 
@@ -456,6 +467,7 @@ struct KeyField: View {
     @EnvironmentObject private var state: AppState
     @Binding var usage: HIDUsage
     let keys: [KeyDef]
+    var fillsWidth = false
     /// Called after a recorded press, e.g. to note which keyboard it came from.
     var onRecord: (HIDKeyEvent) -> Void = { _ in }
     @State private var recorderID = UUID()
@@ -463,7 +475,7 @@ struct KeyField: View {
     private var isRecording: Bool { state.activeRecorder == recorderID }
 
     var body: some View {
-        KeyFieldShell(text: KeyCatalog.name(for: usage), isRecording: isRecording, minWidth: 200,
+        KeyFieldShell(text: KeyCatalog.name(for: usage), isRecording: isRecording, minWidth: 200, fillsWidth: fillsWidth,
                       onClick: toggleRecording) {
             KeyMenuItems(keys: keys) { usage = $0.hid }
         }

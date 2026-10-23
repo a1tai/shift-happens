@@ -33,14 +33,13 @@ struct MonitorScreen: View {
             Spacer(minLength: 0)
         }
         .padding(24)
-        .onAppear {
-            state.swallowLocalKeys += 1
-            state.setMonitorScreenOpen(true)
-        }
+        .onAppear { state.setMonitorScreenOpen(true) }
         .onDisappear {
-            state.swallowLocalKeys -= 1
+            state.setMonitorCovered(false)
             state.setMonitorScreenOpen(false)
         }
+        // While an editor is open over the monitor, the monitor pauses so the editor's fields get the typing.
+        .onChange(of: editingRemap != nil || editingCombo != nil) { state.setMonitorCovered($0) }
         .sheet(item: $editingRemap) { RemapEditor(remap: $0) }
         .sheet(item: $editingCombo) { ComboEditor(combo: $0) }
     }
