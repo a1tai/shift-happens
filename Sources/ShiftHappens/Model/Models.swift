@@ -97,6 +97,18 @@ struct ModifierSet: OptionSet, Codable, Hashable {
         self = set
     }
 
+    /// The flags a real keyboard sets with this key: arrows, F-keys and the navigation keys come with fn
+    /// (arrows also with numeric pad). macOS's own shortcuts such as ⌃↑ (Mission Control) or ⌘F5 (VoiceOver)
+    /// are registered with them, so posted keys need them too.
+    static func hardwareFlags(forKeyCode code: UInt16) -> CGEventFlags {
+        switch code {
+        case 0x7B...0x7E: return [.maskSecondaryFn, .maskNumericPad]
+        case 0x60...0x65, 0x67, 0x69...0x6B, 0x6D, 0x6F, 0x71, 0x72...0x77, 0x78, 0x79, 0x7A, 0x40, 0x4F, 0x50, 0x5A:
+            return .maskSecondaryFn
+        default: return []
+        }
+    }
+
     var cgFlags: CGEventFlags {
         var flags: CGEventFlags = []
         if contains(.control) { flags.insert(.maskControl) }

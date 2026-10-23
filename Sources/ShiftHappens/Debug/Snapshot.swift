@@ -508,6 +508,23 @@ enum DebugSnapshot {
         for window in 0..<30 { memory.willMove(window, from: start, to: left) }
         check("memory keeps only the last windows", memory.takeOriginal(of: 0) == nil && memory.takeOriginal(of: 29) == start)
 
+        // The catalog of macOS shortcuts.
+        let catalog = SystemShortcut.all
+        check("catalog chords are valid keys", catalog.allSatisfy { $0.chord.isValid && $0.chord.mouseButton == nil })
+        check("catalog has no fn", catalog.allSatisfy { !$0.chord.modifiers.contains(.function) && $0.chord.keyCode != KeyCatalog.fnKeyCode })
+        check("catalog chords are all different", Set(catalog.map(\.chord)).count == catalog.count)
+        check("catalog names are all different", Set(catalog.map(\.name)).count == catalog.count)
+        check("catalog categories are known", catalog.allSatisfy { SystemShortcut.categories.contains($0.category) })
+        check("catalog lookup", SystemShortcut.named(KeyChord(keyCode: 0x0C, modifiers: [.control, .command]))?.name == "Lock Screen"
+              && SystemShortcut.named(KeyChord(keyCode: 0x0C, modifiers: .command)) == nil)
+        check("catalog search", SystemShortcut.search("screenshot").count == 5 && SystemShortcut.search("").count == catalog.count
+              && SystemShortcut.search("zzz").isEmpty)
+        check("arrows are posted with fn and numeric pad", ModifierSet.hardwareFlags(forKeyCode: 0x7E) == [.maskSecondaryFn, .maskNumericPad])
+        check("F-keys and Home are posted with fn", ModifierSet.hardwareFlags(forKeyCode: 0x60) == .maskSecondaryFn
+              && ModifierSet.hardwareFlags(forKeyCode: 0x73) == .maskSecondaryFn)
+        check("letters are posted without extra flags", ModifierSet.hardwareFlags(forKeyCode: 0x00).isEmpty
+              && ModifierSet.hardwareFlags(forKeyCode: 0x31).isEmpty)
+
         // Duplicate reports are dropped, but a key released while nobody listened can be pressed again.
         var filter = KeyStateFilter()
         check("first press accepted", filter.accept("kb/7/21", pressed: true))

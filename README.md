@@ -26,6 +26,8 @@ a regular macOS window and lives in the menu bar afterwards.
 - **Combos** — a key, a shortcut or an extra mouse button (middle, back, forward) sends another shortcut,
   or plays a **macro**: key down / key up events, delays and typed text, recorded from the keyboard or
   edited by hand. Example: `PrtSc → ⌘⇧4`, or `Mouse 4 → ⌘[` so the Back button works in Safari and Finder.
+  macOS's own shortcuts (screenshots, Lock Screen, Mission Control, Finder folders…) can be picked from a
+  searchable list instead of remembered.
   A combo can also **open an app** (or bring it to the front, and optionally hide it if it already is),
   and a macro can open an app as one of its steps.
 - **Actions** — a combo can **paste as plain text** (the clipboard's text without fonts, colors or links, in

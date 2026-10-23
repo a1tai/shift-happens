@@ -133,6 +133,9 @@ struct CombosScreen: View {
                             } else if let action = combo.action {
                                 Label(action.display, systemImage: action.systemImage)
                                     .opacity(combo.enabled ? 1 : 0.5)
+                            } else if !combo.isMacro, let known = SystemShortcut.named(combo.output) {
+                                Text(known.name)
+                                Text(combo.output.display).foregroundStyle(.secondary)
                             } else {
                                 KeyBadge(text: combo.outputSummary, highlighted: combo.enabled)
                             }

@@ -21,7 +21,7 @@ struct CGEventPoster: KeyEventPosting {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: down) else { return }
         // A modifier key going down or up is a change of the modifier flags, as from a real keyboard.
         if MacroPlayer.modifier(forKeyCode: keyCode) != nil { event.type = .flagsChanged }
-        event.flags = modifiers.cgFlags
+        event.flags = modifiers.cgFlags.union(ModifierSet.hardwareFlags(forKeyCode: keyCode))
         event.setIntegerValueField(.eventSourceUserData, value: SyntheticEvent.combo)
         event.post(tap: .cghidEventTap)
     }

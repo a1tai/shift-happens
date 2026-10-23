@@ -158,7 +158,7 @@ final class ComboEngine {
         let flags = chord.modifiers.cgFlags
         for isDown in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: chord.keyCode, keyDown: isDown) else { continue }
-            event.flags = flags
+            event.flags = flags.union(ModifierSet.hardwareFlags(forKeyCode: chord.keyCode))
             event.setIntegerValueField(.eventSourceUserData, value: SyntheticEvent.combo)
             // Posting at the HID level lets system shortcuts (screenshots, Mission Control) react too.
             event.post(tap: .cghidEventTap)

@@ -6,6 +6,10 @@
   Run Shortcut (a shortcut from the Shortcuts app; if it fails, the reason shows in the sidebar).
 - More actions: Change Case of the selected text (UPPERCASE, lowercase, Title Case) and window actions
   (Maximize, Left Half, Right Half, Restore) for the front window, on whichever screen it is.
+- The combo editor can pick macOS's own shortcuts from a searchable list (screenshots, system, windows,
+  Finder, text, accessibility); the Combos list shows their names.
+- Arrow keys, F-keys and Home/End/Page Up/Page Down sent by combos and macros carry the same flags as a
+  real keyboard, so macOS shortcuts such as ⌃↑ (Mission Control) or ⌘F5 (VoiceOver) react to them.
 
 ## 1.0.2 — 2026-10-22
 

@@ -94,6 +94,7 @@ struct ComboEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: ComboBinding
     @State private var kind: OutputKind
+    @State private var showsCatalog = false
     private let isNew: Bool
 
     private enum OutputKind { case shortcut, macro, app, action }
@@ -155,6 +156,22 @@ struct ComboEditor: View {
                     GridRow {
                         Text("Send")
                         ChordEditor(chord: $draft.output)
+                    }
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        HStack {
+                            Button("Choose from macOS Shortcuts…") { showsCatalog = true }
+                                .popover(isPresented: $showsCatalog, arrowEdge: .bottom) {
+                                    SystemShortcutPicker { picked in
+                                        draft.output = picked.chord
+                                        if draft.note.isEmpty { draft.note = picked.name }
+                                        showsCatalog = false
+                                    }
+                                }
+                            if let known = SystemShortcut.named(draft.output) {
+                                Text("macOS: \(known.name)").foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }
                     }
                     caption("Sent instead of the trigger. For example Insert → ⌘V.")
                 case .macro:
@@ -623,5 +640,48 @@ struct ShortcutNamePicker: View {
             let list = ShortcutsRunner.list()
             DispatchQueue.main.async { names = list }
         }
+    }
+}
+
+/// macOS's own shortcuts, searchable and grouped, to pick as a combo's output.
+struct SystemShortcutPicker: View {
+    let pick: (SystemShortcut) -> Void
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
+
+    var body: some View {
+        let found = SystemShortcut.search(query)
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Search", text: $query, prompt: Text("Search, for example “screenshot”"))
+                .textFieldStyle(.roundedBorder)
+                .focused($searchFocused)
+            List {
+                ForEach(SystemShortcut.categories, id: \.self) { category in
+                    let entries = found.filter { $0.category == category }
+                    if !entries.isEmpty {
+                        Section(category) {
+                            ForEach(entries) { entry in
+                                Button { pick(entry) } label: {
+                                    HStack {
+                                        Text(entry.name)
+                                        Spacer()
+                                        KeyBadge(text: entry.chord.display)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                if found.isEmpty {
+                    Text("Nothing found").foregroundStyle(.secondary)
+                }
+            }
+            .listStyle(.inset)
+        }
+        .padding(12)
+        .frame(width: 380, height: 420)
+        .onAppear { searchFocused = true }
     }
 }
